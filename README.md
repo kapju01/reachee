@@ -43,4 +43,4 @@ Week 2 skeleton. The pipeline runs end to end against mock providers. The three 
 - Bedrock AgentCore orchestrator and the Bedrock-backed empathy model (week 5)
 - DynamoDB-backed stores and the S3 Object Lock archive (week 4)
 - Inbound response ingestion and classification (week 5)
-- Terraform under `deploy/` (weeks 3 to 5)
+- Terraform under `infra/` (weeks 3 to 5)

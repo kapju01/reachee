@@ -8,3 +8,5 @@ scratch/
 terraform.tfvars
 coverage.out
 .DS_Store
+tf.plan
+*.tfplan

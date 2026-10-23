@@ -4,7 +4,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -26,16 +25,13 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		Environment:        env("REACHEE_ENV", "local"),
-		Region:             env("AWS_REGION", "us-east-1"),
+		Region:             env("AWS_REGION", "us-west-2"),
 		HeartMapPath:       env("REACHEE_HEARTMAP", "examples/heartmap.yaml"),
 		SigningKeyPath:     env("REACHEE_SIGNING_KEY", ""),
 		EmpathyTimeout:     duration("REACHEE_EMPATHY_TIMEOUT_MS", 2000),
 		BreakerCooldown:    duration("REACHEE_BREAKER_COOLDOWN_MS", 30000),
 		AuditTableName:     env("REACHEE_AUDIT_TABLE", "reachee_audit_log"),
 		AuditArchiveBucket: env("REACHEE_AUDIT_BUCKET", ""),
-	}
-	if c.Environment != "local" && c.AuditArchiveBucket == "" {
-		return Config{}, fmt.Errorf("config: REACHEE_AUDIT_BUCKET is required outside local")
 	}
 	return c, nil
 }

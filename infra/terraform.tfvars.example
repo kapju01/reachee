@@ -1,0 +1,3 @@
+sender      = "alerts@example.com"
+recipient   = "oncall@example.com"
+demo_bucket = "reachee-demo-changeme"

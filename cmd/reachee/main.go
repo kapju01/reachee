@@ -17,6 +17,8 @@ func main() {
 	switch {
 	case len(os.Args) > 2 && os.Args[1] == "export":
 		err = runExport(os.Args[2])
+	case len(os.Args) > 1 && os.Args[1] == "keygen":
+		err = runKeygen(os.Stdout)
 	default:
 		err = run()
 	}

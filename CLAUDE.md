@@ -162,6 +162,18 @@ These follow from the principles above and are not negotiable in a hurry.
 3. Coalesced joiners never receive the resolution. Out of scope for the
    submission, documented as a known gap.
 
+## Handler requirements not yet built
+
+Binding on `cmd/raise`, `cmd/attempt`, and `cmd/reply` when they replace the
+not-implemented stubs.
+
+- The signing key is fetched from Secrets Manager once, at init, into a
+  package-level variable, and never per invocation. Criterion 01 allows under
+  a second, and a Secrets Manager call on a cold start will not make that.
+- `reply` refuses out loud when it finds no armed task token for the
+  escalation. It returns an explicit error to the caller and never silently
+  waits, retries, or records the decision for later.
+
 ## Layout
 
 ```
