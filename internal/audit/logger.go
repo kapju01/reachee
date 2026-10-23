@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -100,15 +101,53 @@ func (l *Logger) Emit(e Event) (Event, error) {
 	return e, nil
 }
 
+// TimestampFormat is the single textual form of an event timestamp. It is
+// written into the canonical map and into every export, so no verifier ever
+// has to parse and reformat a time to reproduce the bytes that were signed.
+const TimestampFormat = "2006-01-02T15:04:05.000000Z07:00"
+
+// CanonicalMap is the event as the chain sees it: a plain string-keyed map,
+// with Signature blanked. Both Canonical and any chain export build on this,
+// so what a verifier reads is exactly what was signed.
+//
+// Why a map and not the struct: encoding/json emits struct fields in
+// declaration order and map keys in sorted order. An independent verifier
+// written in another language sorts keys, so signing the struct would make
+// agreement a coincidence of field order. Sorting on both sides makes it a
+// property.
+func CanonicalMap(e Event) map[string]any {
+	md := e.Metadata
+	if md == nil {
+		md = map[string]string{}
+	}
+	return map[string]any{
+		"event_id":      e.EventID,
+		"timestamp":     e.Timestamp.UTC().Truncate(time.Microsecond).Format(TimestampFormat),
+		"prev_hash":     e.PrevHash,
+		"request_id":    e.RequestID,
+		"recipient_id":  e.RecipientID,
+		"provider_name": e.ProviderName,
+		"event_type":    e.EventType,
+		"message_hash":  e.MessageHash,
+		"metadata":      md,
+		"signature":     "",
+	}
+}
+
 // Canonical returns the deterministic byte form signed for an event. Signature
 // is excluded: it signs everything else.
+//
+// HTML escaping is turned off. encoding/json escapes <, > and & by default,
+// which no other language's JSON encoder does, and a single angle bracket in a
+// metadata value would otherwise break cross-language verification.
 func Canonical(e Event) ([]byte, error) {
-	e.Signature = ""
-	if e.Metadata == nil {
-		e.Metadata = map[string]string{}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(CanonicalMap(e)); err != nil {
+		return nil, err
 	}
-	e.Timestamp = e.Timestamp.UTC().Truncate(time.Microsecond)
-	return json.Marshal(e)
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // SignedHash is the SHA-256 of the canonical form concatenated with the
