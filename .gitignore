@@ -1,0 +1,10 @@
+env.sh
+.envrc
+build/
+scratch/
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+coverage.out
+.DS_Store

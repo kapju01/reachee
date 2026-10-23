@@ -1,0 +1,32 @@
+contact:
+  id: justin-kaplan
+  display_name: Justin Kaplan
+  channels:
+    whatsapp:
+      number: "+10000000001"
+      preferred: true
+    email:
+      address: justin@example.invalid
+      preferred: true
+    sms:
+      number: "+10000000002"
+      lifeline: true
+  failover_ladder:
+    - tier: 1
+      channel: whatsapp
+      timeout_seconds: 300
+    - tier: 2
+      channel: email
+      timeout_seconds: 900
+    - tier: 3
+      channel: sms
+      timeout_seconds: 60
+  quiet_hours:
+    timezone: America/Chicago
+    start: "22:00"
+    end: "07:00"
+    p0_bypass: true
+  rate_limit:
+    max_per_hour: 6
+    burst: 3
+    coalesce_window_seconds: 90
