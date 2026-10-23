@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/aisolutions/reachee/internal/heartmap"
 	"github.com/aisolutions/reachee/internal/providers"
@@ -39,6 +40,36 @@ type Client interface {
 // cannot be written truthfully without one, so the send is reported as failed
 // rather than given a synthesized id.
 var ErrNoMessageID = errors.New("ses: SendEmail returned no MessageId")
+
+// SendError is a failed SendEmail. Its text carries only the SES error code,
+// because SES rejection messages name the identities that failed and the
+// dispatcher writes this text into a receipt. The SDK error stays reachable
+// through errors.Is and errors.As for anything that needs the detail.
+type SendError struct {
+	RequestID string
+	Code      string
+	cause     error
+}
+
+// Error implements error.
+func (e *SendError) Error() string { return "ses: send " + e.RequestID + ": " + e.Code }
+
+// Unwrap returns the SDK error.
+func (e *SendError) Unwrap() error { return e.cause }
+
+func sendError(requestID string, err error) *SendError {
+	code := "transport error"
+	var apiErr smithy.APIError
+	switch {
+	case errors.As(err, &apiErr):
+		code = apiErr.ErrorCode()
+	case errors.Is(err, context.DeadlineExceeded):
+		code = "deadline exceeded"
+	case errors.Is(err, context.Canceled):
+		code = "canceled"
+	}
+	return &SendError{RequestID: requestID, Code: code, cause: err}
+}
 
 // Provider is a providers.Messenger that delivers over SES v2.
 type Provider struct {
@@ -88,7 +119,7 @@ func (p *Provider) Send(ctx context.Context, msg providers.Message) (providers.R
 		},
 	})
 	if err != nil {
-		return providers.Receipt{}, fmt.Errorf("ses: send %s: %w", msg.RequestID, err)
+		return providers.Receipt{}, sendError(msg.RequestID, err)
 	}
 	if out == nil || aws.ToString(out.MessageId) == "" {
 		return providers.Receipt{}, fmt.Errorf("%w (request %s)", ErrNoMessageID, msg.RequestID)

@@ -45,6 +45,13 @@ locals {
 
   functions = toset(["raise", "attempt", "reply"])
 
+  # The declared contact policy, rendered with the one verified recipient so
+  # the real address lives in tfvars and never in the repo. It is the same
+  # shape as examples/heartmap.yaml.
+  heartmap = templatefile("${path.module}/heartmap.yaml.tftpl", { recipient = var.recipient })
+
+  demo_bucket = coalesce(var.demo_bucket, "reachee-demo-${local.account_id}")
+
   # Built from the name rather than read from the resource: raise needs the
   # ARN and the state machine needs raise's siblings, and all three functions
   # are one for_each, so a resource reference would be a cycle.

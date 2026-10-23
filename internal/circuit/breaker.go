@@ -150,6 +150,18 @@ func (b *Breaker) Failure() State {
 	return b.state
 }
 
+// Trip opens the breaker at once and records the failure. It is for failures
+// that cannot be transient, such as a channel with no provider registered:
+// waiting out the consecutive-failure threshold would spend two more attempts
+// proving what the first already showed.
+func (b *Breaker) Trip() State {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.record(false)
+	b.trip()
+	return b.state
+}
+
 func (b *Breaker) trip() {
 	b.state = Open
 	b.openedAt = b.now()

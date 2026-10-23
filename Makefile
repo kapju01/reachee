@@ -1,7 +1,7 @@
 GO ?= go
 LAMBDAS := raise attempt reply
 
-.PHONY: build lambdas test cover run fmt vet tidy clean FORCE
+.PHONY: build lambdas apply test cover run fmt vet tidy clean FORCE
 
 build: lambdas
 	$(GO) build ./...
@@ -19,6 +19,13 @@ build/%.zip: FORCE
 	touch -t 202001010000 build/$*/bootstrap
 	rm -f $@
 	cd build/$* && zip -X -q ../$*.zip bootstrap
+
+# Builds the zips and applies infra/. Sender and recipient come from env.sh,
+# so `source ./env.sh && make apply` is the whole deploy. Terraform asks for
+# confirmation; pass TF_APPLY_FLAGS=-auto-approve to skip it.
+apply: lambdas
+	TF_VAR_sender="$$REACHEE_SENDER" TF_VAR_recipient="$$REACHEE_RECIPIENT" \
+		terraform -chdir=infra apply -input=false $(TF_APPLY_FLAGS)
 
 test:
 	$(GO) test ./...

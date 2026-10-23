@@ -119,3 +119,19 @@ func TestObservationsFallOutOfWindow(t *testing.T) {
 		t.Fatalf("stale observations must not count toward the error rate, got %s", b.State())
 	}
 }
+
+func TestTripOpensImmediatelyAndRecovers(t *testing.T) {
+	now := time.Now()
+	b := New("unprovisioned:whatsapp", DefaultConfig(), clockAt(&now))
+
+	if got := b.Trip(); got != Open {
+		t.Fatalf("Trip must open the breaker on the first failure, got %s", got)
+	}
+	if b.Allow() {
+		t.Fatal("an open breaker must not admit attempts")
+	}
+	now = now.Add(DefaultConfig().Cooldown)
+	if got := b.State(); got != HalfOpen {
+		t.Fatalf("a tripped breaker must still half-open after cooldown, got %s", got)
+	}
+}

@@ -3,7 +3,7 @@
 # bucket closed to the public.
 
 resource "aws_s3_bucket" "demo" {
-  bucket = var.demo_bucket
+  bucket = local.demo_bucket
 }
 
 resource "aws_s3_bucket_public_access_block" "demo" {

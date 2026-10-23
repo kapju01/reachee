@@ -9,6 +9,7 @@ variable "recipient" {
 }
 
 variable "demo_bucket" {
-  description = "Globally unique name for the private bucket that holds the demo page."
+  description = "Globally unique name for the private demo bucket. Defaults to reachee-demo-<account id>."
   type        = string
+  default     = null
 }

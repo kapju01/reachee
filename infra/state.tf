@@ -2,8 +2,10 @@
 # structural and can be read off the definition: Release has exactly one way
 # in, from DecideAnswer, and DecideAnswer runs only after AwaitAnswer has been
 # completed by a human's answer through SendTaskSuccess. A denial, a timeout,
-# an unrecognized decision, and an exhausted ladder each end in their own
-# terminal state that writes a receipt and releases nothing.
+# an unrecognized decision, an attention-gate verdict, and an exhausted ladder
+# each end in their own terminal state and release nothing. Each has a
+# receipt: attempt writes the verdict and exhaustion receipts itself, and
+# reply writes the rest.
 #
 # No state retries. A retried Attempt is a second page for the same event,
 # and retry belongs to the dispatcher and the breaker inside attempt.
@@ -54,7 +56,9 @@ locals {
     StartAt = "Attempt"
     States = {
       # Walks exactly one tier. Execution input is {escalation_id, tier}.
-      # attempt returns {status, next_tier?, timeout_seconds}.
+      # attempt returns {status, next_tier?, timeout_seconds}. When the
+      # attention gates stop the escalation, status is the verdict; when the
+      # last tier fails, attempt has already written the exhaustion receipt.
       Attempt = {
         Type     = "Task"
         Resource = "arn:aws:states:::lambda:invoke"
@@ -84,8 +88,23 @@ locals {
             IsPresent = true
             Next      = "NextTier"
           },
+          {
+            Or = [
+              { Variable = "$.attempt.outcome.status", StringEquals = "COALESCED" },
+              { Variable = "$.attempt.outcome.status", StringEquals = "DEFERRED" },
+              { Variable = "$.attempt.outcome.status", StringEquals = "SUPPRESSED" },
+            ]
+            Next = "NotDelivered"
+          },
         ]
         Default = "Exhausted"
+      }
+
+      # The attention gates decided not to reach the person now. That is a
+      # decision with a receipt, not a failure. A deferral is not re-queued
+      # yet: known defect 2.
+      NotDelivered = {
+        Type = "Succeed"
       }
 
       NextTier = {
@@ -184,17 +203,13 @@ locals {
         End = true
       }
 
+      # Reaching nobody is a failure even when every component reported
+      # truthfully, so the execution ends failed, not succeeded. Any status
+      # the routes above do not recognize lands here too.
       Exhausted = {
-        Type     = "Task"
-        Resource = "arn:aws:states:::lambda:invoke"
-        Parameters = {
-          FunctionName = local.attempt_arn
-          Payload = {
-            action            = "record_exhausted"
-            "escalation_id.$" = "$.escalation_id"
-          }
-        }
-        End = true
+        Type  = "Fail"
+        Error = "LadderExhausted"
+        Cause = "No tier delivered. attempt has written the receipts."
       }
     }
   }

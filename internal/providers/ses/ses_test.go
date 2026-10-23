@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
+	"github.com/aws/smithy-go"
 
 	"github.com/aisolutions/reachee/internal/heartmap"
 	"github.com/aisolutions/reachee/internal/providers"
@@ -177,5 +178,29 @@ func TestHealthCheck(t *testing.T) {
 				t.Errorf("err = %v, wantOK %v", err, c.wantOK)
 			}
 		})
+	}
+}
+
+// SES names the unverified identities in its rejection message. That text
+// must not reach a receipt, so only the error code survives into Error().
+func TestSendErrorCarriesOnlyTheCode(t *testing.T) {
+	msg := testMessage()
+	cause := &smithy.GenericAPIError{
+		Code:    "MessageRejected",
+		Message: "Email address is not verified. The following identities failed the check: " + msg.Address,
+	}
+	p := newProvider(t, &fakeClient{sendErr: cause})
+
+	_, err := p.Send(context.Background(), msg)
+	var se *SendError
+	if !errors.As(err, &se) || se.Code != "MessageRejected" {
+		t.Fatalf("err = %v, want SendError with code MessageRejected", err)
+	}
+	if strings.Contains(err.Error(), msg.Address) {
+		t.Errorf("error text discloses the address: %q", err.Error())
+	}
+	var api smithy.APIError
+	if !errors.As(err, &api) {
+		t.Error("SDK error not reachable through errors.As")
 	}
 }

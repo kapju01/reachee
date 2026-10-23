@@ -19,6 +19,14 @@ type Config struct {
 	BreakerCooldown    time.Duration
 	AuditTableName     string
 	AuditArchiveBucket string
+
+	// HeartMapDoc is the Heart-Map itself rather than a path to it. The
+	// Lambdas take it from the environment, where Terraform renders it with
+	// the verified recipient, because their zip holds only the binary.
+	HeartMapDoc     string
+	StateMachineARN string
+	Sender          string
+	ReplyURL        string
 }
 
 // Load reads configuration from the environment with Reachee defaults.
@@ -32,6 +40,10 @@ func Load() (Config, error) {
 		BreakerCooldown:    duration("REACHEE_BREAKER_COOLDOWN_MS", 30000),
 		AuditTableName:     env("REACHEE_AUDIT_TABLE", "reachee_audit_log"),
 		AuditArchiveBucket: env("REACHEE_AUDIT_BUCKET", ""),
+		HeartMapDoc:        env("REACHEE_HEARTMAP_DOC", ""),
+		StateMachineARN:    env("REACHEE_STATE_MACHINE", ""),
+		Sender:             env("REACHEE_SENDER", ""),
+		ReplyURL:           env("REACHEE_REPLY_URL", ""),
 	}
 	return c, nil
 }

@@ -257,3 +257,71 @@ func TestUnknownRecipientIsRejected(t *testing.T) {
 		t.Fatal("expected an error for an unknown recipient")
 	}
 }
+
+// Tier 1 of the deployed ladder has no provider. That must be a named broken
+// promise that opens its breaker, and the next escalation must see the skip.
+func TestUnregisteredChannelBreaksThePromiseAndOpensTheBreaker(t *testing.T) {
+	now := daytime()
+	h := newHarness(t, 0, 0, func() time.Time { return now })
+	delete(h.d.Providers, heartmap.ChannelWhatsApp)
+
+	if _, err := h.d.Dispatch(context.Background(), request("a", providers.P1)); err != nil {
+		t.Fatal(err)
+	}
+	events := h.sink.All()
+	if len(events) != 2 || events[0].EventType != audit.TypeFailed || events[1].EventType != audit.TypeSent {
+		t.Fatalf("expected FAILED then SENT, got %d events", len(events))
+	}
+	if events[0].Metadata["channel"] != heartmap.ChannelWhatsApp || events[0].Metadata["breaker_state"] != string(circuit.Open) {
+		t.Fatalf("the broken promise must name its channel and the open breaker, got %v", events[0].Metadata)
+	}
+
+	if _, err := h.d.Dispatch(context.Background(), request("b", providers.P1)); err != nil {
+		t.Fatal(err)
+	}
+	skip := h.sink.All()[2]
+	if skip.EventType != audit.TypeEscalated || skip.Metadata["breaker_state"] != string(circuit.Open) {
+		t.Fatalf("an open breaker must produce a skip receipt, got %s %v", skip.EventType, skip.Metadata)
+	}
+}
+
+// AttemptTier is what one Lambda invocation runs: one rung, one receipt.
+func TestAttemptTierWalksExactlyOneRung(t *testing.T) {
+	now := daytime()
+	h := newHarness(t, -1, 0, func() time.Time { return now })
+	policy, _ := h.d.Policies.Resolve("justin-kaplan")
+	req := request("one", providers.P1)
+	translated := h.d.Translate(context.Background(), req, policy)
+
+	res, err := h.d.AttemptTier(context.Background(), req, policy, policy.Ladder[0], translated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != StatusFailed || res.Err == nil {
+		t.Fatalf("tier 1 should fail, got %s", res.Status)
+	}
+	if got := len(h.sink.All()); got != 1 {
+		t.Fatalf("one rung must write exactly one receipt, got %d", got)
+	}
+	if len(h.ses.Sent()) != 0 || len(h.sms.Sent()) != 0 {
+		t.Fatal("walking tier 1 must not touch any other tier's provider")
+	}
+}
+
+// Gate runs once per escalation. Running it again for a later tier would
+// coalesce the escalation into the window it opened itself.
+func TestGateTwiceCoalescesIntoItself(t *testing.T) {
+	now := daytime()
+	h := newHarness(t, 0, 0, func() time.Time { return now })
+	policy, _ := h.d.Policies.Resolve("justin-kaplan")
+	req := request("self", providers.P1)
+
+	first, _, err := h.d.Gate(req, policy)
+	if err != nil || !first.Delivers() {
+		t.Fatalf("first gate should deliver, got %s %v", first.Verdict, err)
+	}
+	second, _, _ := h.d.Gate(req, policy)
+	if second.Verdict != dignity.Coalesced {
+		t.Fatalf("this test documents why Gate is called once; got %s", second.Verdict)
+	}
+}

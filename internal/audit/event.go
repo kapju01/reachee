@@ -14,6 +14,7 @@ import (
 
 // EventType values are the promise states Reachee reports.
 const (
+	TypePromised     = "PROMISED"
 	TypeSent         = "SENT"
 	TypeReceived     = "RECEIVED"
 	TypeAcknowledged = "ACKNOWLEDGED"
@@ -24,6 +25,13 @@ const (
 	TypeDeferred     = "DEFERRED"
 	TypeBypassed     = "BYPASSED"
 	TypeBreaker      = "BREAKER_STATE_CHANGE"
+
+	// The three ways an answered or unanswered hold ends. Only RESOLVED
+	// releases the held action; DENIED and TIMED_OUT are named separately so
+	// no reader can mistake either for a release.
+	TypeResolved = "RESOLVED"
+	TypeDenied   = "DENIED"
+	TypeTimedOut = "TIMED_OUT"
 )
 
 // Event is one link in the chain. Field order is the canonical serialization

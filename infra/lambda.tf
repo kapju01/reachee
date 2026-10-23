@@ -40,10 +40,12 @@ locals {
   }
 
   own_statements = {
-    # raise writes the first receipt and starts the execution.
+    # raise writes the request record and the PROMISED receipt, reading the
+    # (empty) chain first so the logger finds its head the one way it always
+    # does, and starts the execution.
     raise = [
       {
-        actions   = ["dynamodb:PutItem"]
+        actions   = ["dynamodb:Query", "dynamodb:PutItem"]
         resources = [aws_dynamodb_table.escalations.arn]
       },
       {
@@ -52,11 +54,12 @@ locals {
       },
     ]
 
-    # attempt reads the chain head to append to it, and sends on SES.
-    # GetAccount has no resource type, so the health check needs "*".
+    # attempt reads the request record and the chain head, mints the reply
+    # slot, appends to the chain, and sends on SES. GetAccount has no resource type, so the health
+    # check needs "*".
     attempt = [
       {
-        actions   = ["dynamodb:Query", "dynamodb:PutItem"]
+        actions   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem"]
         resources = [aws_dynamodb_table.escalations.arn]
       },
       {
@@ -69,14 +72,15 @@ locals {
       },
     ]
 
-    # reply holds the task token, consumes the single-use reply token, and
-    # hands the answer back to the execution. SendTaskSuccess has no resource
-    # type in IAM, so it cannot be narrowed below "*"; the task token itself
-    # is the control. SendTaskFailure is not granted: a denial is an answer,
-    # routed by the state machine, not a failure.
+    # reply holds the task token, spends the link's nonce, writes the answer
+    # receipts, and hands the answer back to the execution. Every slot change
+    # is a conditional PutItem, so UpdateItem is not granted. SendTaskSuccess
+    # has no resource type in IAM, so it cannot be narrowed below "*"; the
+    # task token itself is the control. SendTaskFailure is not granted: a
+    # denial is an answer, routed by the state machine, not a failure.
     reply = [
       {
-        actions   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+        actions   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem"]
         resources = [aws_dynamodb_table.escalations.arn]
       },
       {
@@ -91,12 +95,14 @@ locals {
       REACHEE_AUDIT_TABLE   = aws_dynamodb_table.escalations.name
       REACHEE_SIGNING_KEY   = aws_secretsmanager_secret.signing_key.arn
       REACHEE_STATE_MACHINE = local.state_machine_arn
+      REACHEE_HEARTMAP_DOC  = local.heartmap
     }
     attempt = {
-      REACHEE_AUDIT_TABLE = aws_dynamodb_table.escalations.name
-      REACHEE_SIGNING_KEY = aws_secretsmanager_secret.signing_key.arn
-      REACHEE_SENDER      = var.sender
-      REACHEE_RECIPIENT   = var.recipient
+      REACHEE_AUDIT_TABLE  = aws_dynamodb_table.escalations.name
+      REACHEE_SIGNING_KEY  = aws_secretsmanager_secret.signing_key.arn
+      REACHEE_SENDER       = var.sender
+      REACHEE_HEARTMAP_DOC = local.heartmap
+      REACHEE_REPLY_URL    = "${aws_apigatewayv2_api.http.api_endpoint}/reply"
     }
     reply = {
       REACHEE_AUDIT_TABLE = aws_dynamodb_table.escalations.name
