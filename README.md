@@ -80,11 +80,43 @@ the only thing a caller needs.
 - **The role enforces what is withheld.** The request record and the reply
   slot sit in the same DynamoDB partition as the chain, so the status
   Lambda's role does more than grant `dynamodb:Query`. Its conditions refuse
-  any query that asks for more than the `event` attribute. The handler cannot
-  return what it cannot read.
+  any query that asks for more than the `event` attribute. They also refuse
+  any query whose partition key is not shaped like a UUIDv7, which keeps the
+  reserved `#breaker/` partitions out of reach. The handler cannot return
+  what it cannot read.
 - **The contact is named.** Each receipt carries `recipient_id`, the
   Heart-Map contact handle, which is already in the committed Heart-Map.
   Knowing that a clinician was reached is part of what the chain proves.
+
+## Circuit breakers
+
+Each provider's breaker is kept in the escalations table, one reserved
+partition per breaker (`#breaker/ses-v2`, `#breaker/unprovisioned:whatsapp`).
+`attempt` reads a breaker before it touches a provider and records every
+outcome after. Every write is conditional on the version it read. When two
+invocations race, the loser reapplies its outcome to the winner's position
+rather than overwriting it. A breaker opened by one escalation is therefore
+open for the next, whether or not the next lands on the same execution
+environment.
+
+- **Trip opens the breaker on the spot.** A channel with no provider registered
+  trips its breaker on the first attempt, without waiting for a failure
+  threshold.
+- **Cooldown is fifteen minutes, set by the attention budget.** On a
+  provisioned channel, a half-open probe sends a real message to a real
+  person. Fifteen minutes allows four probes an hour per breaker, and the
+  Heart-Map permits six reaches an hour, so re-probing a broken channel can
+  never spend the budget on its own. One probe is admitted per cooldown, and
+  the claim is itself a conditional write. A probe whose outcome never arrives
+  lapses after one cooldown.
+- **Breaker failures are written into the receipt.** If a breaker cannot be
+  read, its tier is not attempted, and a `FAILED` receipt says why. If an
+  outcome cannot be recorded, the receipt is written anyway with
+  `breaker_recorded: false`.
+
+Known gap: the dignity pipeline (coalescing, the attention budget, quiet
+hours) still keeps its state in memory per execution environment. Its
+decisions hold across warm invocations of `attempt`, not across cold starts.
 
 ## Not yet built
 

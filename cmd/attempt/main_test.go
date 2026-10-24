@@ -14,6 +14,7 @@ import (
 	"github.com/aisolutions/reachee/internal/ddb"
 	"github.com/aisolutions/reachee/internal/ddb/ddbtest"
 	"github.com/aisolutions/reachee/internal/dignity"
+	"github.com/aisolutions/reachee/internal/dispatcher"
 	"github.com/aisolutions/reachee/internal/empathy"
 	"github.com/aisolutions/reachee/internal/heartmap"
 	"github.com/aisolutions/reachee/internal/providers"
@@ -300,4 +301,47 @@ func TestBodyCarriesNoMarkerOrSubjectAndLocalExpiry(t *testing.T) {
 	if sentEv := events[len(events)-1]; sentEv.Metadata["empathy_source"] != "fallback" || sentEv.Metadata["empathy_reason"] == "" {
 		t.Fatalf("provenance must stay on the SENT receipt, got %v", sentEv.Metadata)
 	}
+}
+
+// The gate for criterion 05 by construction: two escalations minutes apart,
+// each in its own cold environment sharing only the table. The second skips
+// WhatsApp on the breaker the first opened.
+func TestOpenBreakerHoldsAcrossColdStarts(t *testing.T) {
+	f := newFixture(t, afternoon())
+	store := ddb.BreakerStore{Client: f.tbl, Table: "t"}
+	cold := func() {
+		f.a.breakers = circuit.NewStoredRegistry(circuit.DefaultConfig(), func() time.Time { return *f.now }, store)
+		f.a.dignity = dignity.New(func() time.Time { return *f.now })
+	}
+
+	cold()
+	f.raise(t, "esc-1", "first")
+	if out := f.walk(t, "esc-1", 1); out.Status != "FAILED" {
+		t.Fatalf("first escalation, tier 1 = %s, want FAILED", out.Status)
+	}
+
+	*f.now = f.now.Add(5 * time.Minute)
+	cold()
+	f.raise(t, "esc-2", "second")
+	out := f.walk(t, "esc-2", 1)
+	if out.Status != dispatcher.StatusSkipped || out.NextTier == nil || *out.NextTier != 2 {
+		t.Fatalf("second escalation, tier 1 = %+v, want a skip on to tier 2", out)
+	}
+	events := f.chainOf(t, "esc-2")
+	skip := events[len(events)-1]
+	if skip.EventType != audit.TypeEscalated || skip.Metadata["breaker_state"] != string(circuit.Open) || skip.Metadata["channel"] != "whatsapp" {
+		t.Fatalf("second escalation's tier 1 receipt = %s %v, want ESCALATED with breaker_state OPEN on whatsapp", skip.EventType, skip.Metadata)
+	}
+	if two := f.walk(t, "esc-2", 2); two.Status != "SENT" {
+		t.Fatalf("second escalation, tier 2 = %s", two.Status)
+	}
+}
+
+func (f *fixture) chainOf(t *testing.T, id string) []audit.Event {
+	t.Helper()
+	sink, err := ddb.NewSink(context.Background(), f.tbl, "t", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sink.All()
 }

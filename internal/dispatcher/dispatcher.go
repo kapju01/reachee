@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -200,6 +201,12 @@ func (d *Dispatcher) Translate(ctx context.Context, req Request, policy heartmap
 // error means the receipt could not be written, which is the one failure that
 // cannot be reported in the chain itself.
 //
+// The breaker's position is read before the provider is touched and recorded
+// after. If it cannot be read, the tier is not attempted and says so in a
+// FAILED receipt. If an outcome cannot be recorded, the receipt is written
+// anyway and carries breaker_recorded: false: a provider's acceptance is a
+// fact, and a breaker that missed it does not unmake it.
+//
 // A channel with no provider registered is a broken promise, not a gap to
 // step over silently. It trips that channel's breaker at once, because no
 // number of retries will make an unprovisioned channel deliver.
@@ -214,10 +221,21 @@ func (d *Dispatcher) AttemptTier(ctx context.Context, req Request, policy heartm
 		breakerName = provider.Name()
 		providerName = provider.Name()
 	}
-	breaker := d.Breakers.For(breakerName)
+	var allowed bool
+	var state circuit.State
+	if useErr := d.Breakers.Use(ctx, breakerName, func(b *circuit.Breaker) {
+		allowed = b.Allow()
+		state = b.State()
+	}); useErr != nil {
+		ev, err := d.emit(req, providerName, audit.TypeFailed, contentHash, map[string]string{
+			"tier":    tier,
+			"channel": rung.Channel,
+			"reason":  "promise broken: breaker state unreadable, tier not attempted",
+		})
+		return TierResult{Status: StatusFailed, Event: ev, Provider: providerName, Err: useErr}, err
+	}
 
-	if !breaker.Allow() {
-		state := breaker.State()
+	if !allowed {
 		ev, err := d.emit(req, providerName, audit.TypeEscalated, contentHash, map[string]string{
 			"tier":          tier,
 			"channel":       rung.Channel,
@@ -231,13 +249,14 @@ func (d *Dispatcher) AttemptTier(ctx context.Context, req Request, policy heartm
 	}
 
 	if !registered {
-		state := breaker.Trip()
+		recorded := d.record(ctx, breakerName, func(b *circuit.Breaker) { state = b.Trip() })
 		cause := fmt.Errorf("dispatcher: no provider registered for channel %q", rung.Channel)
 		ev, err := d.emit(req, "", audit.TypeFailed, contentHash, map[string]string{
-			"tier":          tier,
-			"channel":       rung.Channel,
-			"reason":        "promise broken: no provider registered for channel " + rung.Channel,
-			"breaker_state": string(state),
+			"tier":             tier,
+			"channel":          rung.Channel,
+			"reason":           "promise broken: no provider registered for channel " + rung.Channel,
+			"breaker_state":    string(state),
+			"breaker_recorded": recorded,
 		})
 		return TierResult{Status: StatusFailed, Event: ev, Err: cause}, err
 	}
@@ -266,27 +285,40 @@ func (d *Dispatcher) AttemptTier(ctx context.Context, req Request, policy heartm
 	cancel()
 
 	if sendErr != nil {
-		state := breaker.Failure()
+		recorded := d.record(ctx, breakerName, func(b *circuit.Breaker) { state = b.Failure() })
 		ev, err := d.emit(req, providerName, audit.TypeFailed, contentHash, map[string]string{
-			"tier":          tier,
-			"channel":       rung.Channel,
-			"reason":        "promise broken by provider: " + sendErr.Error(),
-			"breaker_state": string(state),
+			"tier":             tier,
+			"channel":          rung.Channel,
+			"reason":           "promise broken by provider: " + sendErr.Error(),
+			"breaker_state":    string(state),
+			"breaker_recorded": recorded,
 		})
 		return TierResult{Status: StatusFailed, Event: ev, Provider: providerName, Err: sendErr}, err
 	}
 
-	breaker.Success()
+	recorded := d.record(ctx, breakerName, func(b *circuit.Breaker) { b.Success() })
 	ev, err := d.emit(req, providerName, audit.TypeSent, contentHash, map[string]string{
-		"tier":            tier,
-		"channel":         rung.Channel,
-		"provider_msg_id": receipt.ProviderMsgID,
-		"empathy_source":  string(translated.Source),
-		"empathy_reason":  translated.Reason,
-		"agent_id":        req.AgentID,
-		"agent_autonomy":  req.AgentAutonomy,
+		"tier":             tier,
+		"channel":          rung.Channel,
+		"provider_msg_id":  receipt.ProviderMsgID,
+		"empathy_source":   string(translated.Source),
+		"empathy_reason":   translated.Reason,
+		"agent_id":         req.AgentID,
+		"agent_autonomy":   req.AgentAutonomy,
+		"breaker_recorded": recorded,
 	})
 	return TierResult{Status: StatusSent, Event: ev, Provider: providerName, Receipt: receipt}, err
+}
+
+// record applies an outcome to a breaker. It returns "false" when the outcome
+// could not be kept, for the receipt to say so, and "" otherwise, which emit
+// drops, so a normal receipt carries no breaker_recorded key at all.
+func (d *Dispatcher) record(ctx context.Context, name string, op func(*circuit.Breaker)) string {
+	if err := d.Breakers.Use(ctx, name, op); err != nil {
+		log.Printf("dispatcher: %s breaker outcome not recorded: %v", name, err)
+		return "false"
+	}
+	return ""
 }
 
 // Exhausted records that every tier was walked and none delivered. Reaching

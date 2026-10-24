@@ -37,10 +37,11 @@ import (
 // execution environment serves.
 var signingKey ed25519.PrivateKey
 
-// attempter holds what outlives one invocation. The dignity pipeline and the
-// breakers live here so that coalescing, the attention budget, and an open
-// breaker carry across warm invocations. They do not survive a cold start or
-// span concurrent environments; that gap is stated in the README.
+// attempter holds what outlives one invocation. Breakers are kept in the
+// escalations table and read on every use, so an open breaker holds across
+// cold starts and concurrent environments. The dignity pipeline still lives
+// here, so coalescing and the attention budget carry across warm invocations
+// only; that gap is stated in the README.
 type attempter struct {
 	db         ddb.Client
 	table      string
@@ -229,13 +230,16 @@ func initialize(ctx context.Context) (*attempter, error) {
 	if err != nil {
 		return nil, err
 	}
+	db := dynamodb.NewFromConfig(awsCfg)
+	breakerCfg := circuit.DefaultConfig()
+	breakerCfg.Cooldown = cfg.BreakerCooldown
 	return &attempter{
-		db:         dynamodb.NewFromConfig(awsCfg),
+		db:         db,
 		table:      cfg.AuditTableName,
 		policies:   store,
 		key:        signingKey,
 		dignity:    dignity.New(nil),
-		breakers:   circuit.NewRegistry(circuit.DefaultConfig(), nil),
+		breakers:   circuit.NewStoredRegistry(breakerCfg, nil, ddb.BreakerStore{Client: db, Table: cfg.AuditTableName}),
 		translator: empathy.NewTranslator(nil, cfg.EmpathyTimeout),
 		providers:  map[string]providers.Messenger{heartmap.ChannelEmail: email},
 		now:        time.Now,

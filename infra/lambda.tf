@@ -56,8 +56,9 @@ locals {
     ]
 
     # attempt reads the request record and the chain head, mints the reply
-    # slot, appends to the chain, and sends on SES. GetAccount has no resource type, so the health
-    # check needs "*".
+    # slot, appends to the chain, keeps the circuit breakers in their reserved
+    # #breaker/ partitions, and sends on SES. GetAccount has no resource type,
+    # so the health check needs "*".
     attempt = [
       {
         actions   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem"]
@@ -97,11 +98,31 @@ locals {
     # Query only when it names the event attribute alone and says so with
     # Select; ForAllValues passes on an absent key, so Select is tested
     # without IfExists and a query that omits it is refused.
+    #
+    # LeadingKeys limits Query to partitions shaped like a UUIDv7, the only
+    # ids audit.NewEventID issues, with the version nibble pinned to 7.
+    # StringLike cannot pin the variant nibble; the handler's own check does.
+    # Reserved partitions such as #breaker/<name> begin with "#", and what
+    # keeps them out is this pattern's length and its dash positions (9, 14,
+    # 19, 24), not the "#": a future reserved key must never be 36 characters
+    # with dashes there. ForAllValues is satisfied vacuously by a request with
+    # no partition key, so the Null test requires one to be present rather
+    # than leaving that to Scan and GetItem not being granted.
     status = [
       {
         actions   = ["dynamodb:Query"]
         resources = [aws_dynamodb_table.escalations.arn]
         conditions = [
+          {
+            test     = "ForAllValues:StringLike"
+            variable = "dynamodb:LeadingKeys"
+            values   = ["????????-????-7???-????-????????????"]
+          },
+          {
+            test     = "Null"
+            variable = "dynamodb:LeadingKeys"
+            values   = ["false"]
+          },
           {
             test     = "ForAllValues:StringEquals"
             variable = "dynamodb:Attributes"
@@ -130,6 +151,9 @@ locals {
       REACHEE_SENDER       = var.sender
       REACHEE_HEARTMAP_DOC = local.heartmap
       REACHEE_REPLY_URL    = "${aws_apigatewayv2_api.http.api_endpoint}/reply"
+      # Fifteen minutes: four probes an hour per breaker against a Heart-Map
+      # that permits six reaches an hour. See circuit.DefaultConfig.
+      REACHEE_BREAKER_COOLDOWN_MS = "900000"
     }
     reply = {
       REACHEE_AUDIT_TABLE = aws_dynamodb_table.escalations.name

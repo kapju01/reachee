@@ -37,7 +37,7 @@ func Load() (Config, error) {
 		HeartMapPath:       env("REACHEE_HEARTMAP", "examples/heartmap.yaml"),
 		SigningKeyPath:     env("REACHEE_SIGNING_KEY", ""),
 		EmpathyTimeout:     duration("REACHEE_EMPATHY_TIMEOUT_MS", 2000),
-		BreakerCooldown:    duration("REACHEE_BREAKER_COOLDOWN_MS", 30000),
+		BreakerCooldown:    duration("REACHEE_BREAKER_COOLDOWN_MS", 900000),
 		AuditTableName:     env("REACHEE_AUDIT_TABLE", "reachee_audit_log"),
 		AuditArchiveBucket: env("REACHEE_AUDIT_BUCKET", ""),
 		HeartMapDoc:        env("REACHEE_HEARTMAP_DOC", ""),

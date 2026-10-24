@@ -135,3 +135,36 @@ func TestTripOpensImmediatelyAndRecovers(t *testing.T) {
 		t.Fatalf("a tripped breaker must still half-open after cooldown, got %s", got)
 	}
 }
+
+// A probe that never reports back lapses after one cooldown. Once breakers
+// are persisted, a claim that never lapsed would hold one half-open forever.
+func TestUnreportedProbeLapses(t *testing.T) {
+	now := time.Date(2026, 10, 24, 1, 0, 0, 0, time.UTC)
+	cfg := DefaultConfig()
+	b := New("ses", cfg, clockAt(&now))
+	b.Trip()
+	now = now.Add(cfg.Cooldown)
+	if !b.Allow() {
+		t.Fatal("the first probe after the cooldown must be admitted")
+	}
+	if b.Allow() {
+		t.Fatal("a second probe was admitted while the first was out")
+	}
+	now = now.Add(cfg.Cooldown)
+	if !b.Allow() {
+		t.Fatal("a probe that never reported must lapse after one cooldown")
+	}
+}
+
+// A snapshot restored into a fresh breaker is the same breaker.
+func TestSnapshotRoundTrip(t *testing.T) {
+	now := time.Date(2026, 10, 24, 1, 0, 0, 0, time.UTC)
+	a := New("ses", DefaultConfig(), clockAt(&now))
+	a.Failure()
+	a.Failure()
+	b := New("ses", DefaultConfig(), clockAt(&now))
+	b.Restore(a.Snapshot())
+	if got := b.Failure(); got != Open {
+		t.Fatalf("the third failure after a restore left the breaker %s", got)
+	}
+}

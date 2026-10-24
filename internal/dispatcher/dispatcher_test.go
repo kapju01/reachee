@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -370,5 +371,79 @@ func TestGateTwiceCoalescesIntoItself(t *testing.T) {
 	second, _, _ := h.d.Gate(req, policy)
 	if second.Verdict != dignity.Coalesced {
 		t.Fatalf("this test documents why Gate is called once; got %s", second.Verdict)
+	}
+}
+
+// brokenStore fails Load or Save on demand.
+type brokenStore struct {
+	loadErr, saveErr error
+}
+
+func (s brokenStore) Load(context.Context, string) (circuit.Snapshot, int64, error) {
+	return circuit.Snapshot{}, 0, s.loadErr
+}
+
+func (s brokenStore) Save(context.Context, string, circuit.Snapshot, int64) error {
+	return s.saveErr
+}
+
+func attemptEmail(t *testing.T, h *harness) TierResult {
+	t.Helper()
+	policy, _ := h.d.Policies.Resolve("justin-kaplan")
+	req := request("r1", providers.P1)
+	res, err := h.d.AttemptTier(context.Background(), req, policy, policy.Ladder[1], h.d.Translate(context.Background(), req, policy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+// If the breaker cannot be read, nobody knows whether the tier is broken, so
+// it is not attempted, and the receipt says why.
+func TestUnreadableBreakerSkipsTheProviderOutLoud(t *testing.T) {
+	now := daytime()
+	clock := func() time.Time { return now }
+	h := newHarness(t, 0, 0, clock)
+	h.d.Breakers = circuit.NewStoredRegistry(circuit.DefaultConfig(), clock, brokenStore{loadErr: errors.New("table unavailable")})
+	res := attemptEmail(t, h)
+	if res.Status != StatusFailed || res.Event.EventType != audit.TypeFailed {
+		t.Fatalf("got %s %s, want FAILED", res.Status, res.Event.EventType)
+	}
+	if !strings.Contains(res.Event.Metadata["reason"], "breaker state unreadable") {
+		t.Fatalf("reason = %q", res.Event.Metadata["reason"])
+	}
+	if len(h.ses.Sent()) != 0 {
+		t.Fatal("a tier whose breaker could not be read touched its provider")
+	}
+}
+
+// A provider's acceptance is a fact. A breaker that failed to record it does
+// not unmake it: SENT is still written, and says the breaker missed it.
+func TestUnrecordedOutcomeStillWritesTheReceipt(t *testing.T) {
+	now := daytime()
+	clock := func() time.Time { return now }
+	h := newHarness(t, 0, 0, clock)
+	h.d.Breakers = circuit.NewStoredRegistry(circuit.DefaultConfig(), clock, brokenStore{saveErr: errors.New("throttled")})
+	res := attemptEmail(t, h)
+	if res.Status != StatusSent || res.Event.EventType != audit.TypeSent {
+		t.Fatalf("got %s %s, want SENT", res.Status, res.Event.EventType)
+	}
+	if res.Event.Metadata["breaker_recorded"] != "false" {
+		t.Fatalf("breaker_recorded = %q, want false", res.Event.Metadata["breaker_recorded"])
+	}
+	if len(h.ses.Sent()) != 1 {
+		t.Fatal("expected exactly one send")
+	}
+}
+
+// When the breaker keeps the outcome, the receipt carries no breaker_recorded
+// key at all, so every receipt written so far is unchanged in shape.
+func TestRecordedOutcomeAddsNoKey(t *testing.T) {
+	now := daytime()
+	clock := func() time.Time { return now }
+	h := newHarness(t, 0, 0, clock)
+	res := attemptEmail(t, h)
+	if _, ok := res.Event.Metadata["breaker_recorded"]; ok {
+		t.Fatalf("a recorded outcome carried breaker_recorded: %v", res.Event.Metadata)
 	}
 }
