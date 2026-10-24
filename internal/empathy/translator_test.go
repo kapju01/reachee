@@ -3,7 +3,6 @@ package empathy
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 )
@@ -46,8 +45,8 @@ func TestModelErrorFallsBackAndDiscloses(t *testing.T) {
 	if got.Source != SourceFallback {
 		t.Fatalf("expected the fallback source, got %s", got.Source)
 	}
-	if !strings.HasPrefix(got.Body, "[fallback]") {
-		t.Fatalf("the fallback must be visible in the payload, got %q", got.Body)
+	if got.Body != req().RawContent {
+		t.Fatalf("the fallback sends the raw content alone, with no marker and no repeated subject, got %q", got.Body)
 	}
 	if got.Reason == "" {
 		t.Fatal("the fallback must record why it ran")

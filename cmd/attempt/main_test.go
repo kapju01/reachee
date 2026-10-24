@@ -273,3 +273,31 @@ func fmtChain(t *testing.T, f *fixture) string {
 	}
 	return b.String()
 }
+
+// The clinician reads the agent's words, the requested response, and an
+// expiry in their own time zone. Provenance lives on the SENT receipt, not in
+// the message, and the subject is the subject line, not the first line.
+func TestBodyCarriesNoMarkerOrSubjectAndLocalExpiry(t *testing.T) {
+	f := newFixture(t, afternoon())
+	f.raise(t, "esc-1", "")
+	f.walk(t, "esc-1", 1)
+	f.walk(t, "esc-1", 2)
+
+	sent := f.email.Sent()[0]
+	if sent.Subject != "Hold dose?" {
+		t.Fatalf("subject = %q", sent.Subject)
+	}
+	if !strings.HasPrefix(sent.Body, "potassium 6.1\n") {
+		t.Fatalf("the body must open with the payload, got %q", sent.Body)
+	}
+	if strings.Contains(sent.Body, "[fallback]") || strings.Contains(sent.Body, "Hold dose?") {
+		t.Fatalf("the body carries a debug marker or repeats the subject: %q", sent.Body)
+	}
+	if !strings.HasSuffix(sent.Body, "expires at 14:15 CDT.") {
+		t.Fatalf("expiry must read in the Heart-Map's zone, got %q", sent.Body)
+	}
+	events := f.chain(t, "esc-1")
+	if sentEv := events[len(events)-1]; sentEv.Metadata["empathy_source"] != "fallback" || sentEv.Metadata["empathy_reason"] == "" {
+		t.Fatalf("provenance must stay on the SENT receipt, got %v", sentEv.Metadata)
+	}
+}

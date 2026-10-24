@@ -70,16 +70,21 @@ func (p Policy) Address(channel string) (string, bool) {
 	return c.Address, true
 }
 
+// Location is the contact's declared time zone, or UTC when none is declared.
+// Quiet hours and every time shown to the contact are read in it.
+func (p Policy) Location() *time.Location {
+	if p.QuietHours.Location == nil {
+		return time.UTC
+	}
+	return p.QuietHours.Location
+}
+
 // InQuietHours reports whether at is inside the contact's quiet window.
 func (p Policy) InQuietHours(at time.Time) bool {
 	if p.QuietHours.Start == "" || p.QuietHours.End == "" {
 		return false
 	}
-	loc := p.QuietHours.Location
-	if loc == nil {
-		loc = time.UTC
-	}
-	local := at.In(loc)
+	local := at.In(p.Location())
 	mins := local.Hour()*60 + local.Minute()
 	start, err1 := minutesOfDay(p.QuietHours.Start)
 	end, err2 := minutesOfDay(p.QuietHours.End)

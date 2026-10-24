@@ -143,7 +143,7 @@ func (a *attempter) handle(ctx context.Context, in attemptInput) (attemptOutput,
 	translated := d.Translate(ctx, req, policy)
 	translated.Body += "\n\nRequested response: " + req.RequestedResponse +
 		"\n\nAnswer here: " + link +
-		"\nThe link records one answer and expires at " + expires.UTC().Format("15:04 MST") + "."
+		"\nThe link records one answer and expires at " + expires.In(policy.Location()).Format("15:04 MST") + "."
 
 	res, err := d.AttemptTier(ctx, req, policy, rung, translated)
 	if err != nil {

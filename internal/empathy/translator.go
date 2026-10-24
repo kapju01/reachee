@@ -1,12 +1,12 @@
 // Package empathy wraps raw agent output in language that respects the
-// recipient's attention. When the model is unavailable the fallback says so,
-// in the payload and in the audit log, so nobody is misled about whether the
-// empathy layer ran.
+// recipient's attention. When the model is unavailable the fallback sends the
+// agent's own words unaltered and says so in the audit log, through Source and
+// Reason on the SENT receipt, so nobody is misled about whether the empathy
+// layer ran. The recipient's message carries no debug marker.
 package empathy
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -56,7 +56,7 @@ func NewTranslator(model Model, timeout time.Duration) *Translator {
 	return &Translator{model: model, timeout: timeout}
 }
 
-// Translate humanizes a message, or returns a marked fallback.
+// Translate humanizes a message, or falls back with its provenance recorded.
 func (t *Translator) Translate(ctx context.Context, req Request) Result {
 	if t.model == nil {
 		return Fallback(req, "no model configured")
@@ -88,11 +88,9 @@ func (t *Translator) Translate(ctx context.Context, req Request) Result {
 	}
 }
 
-// Fallback builds the marked, unhumanized message.
+// Fallback builds the unhumanized message: the raw content alone. The subject
+// already travels as the message's subject line, so repeating it here would
+// make the reader read it twice.
 func Fallback(req Request, reason string) Result {
-	body := fmt.Sprintf("[fallback] %s", strings.TrimSpace(req.RawContent))
-	if req.Subject != "" {
-		body = fmt.Sprintf("[fallback] %s: %s", req.Subject, strings.TrimSpace(req.RawContent))
-	}
-	return Result{Body: body, Source: SourceFallback, Reason: reason}
+	return Result{Body: strings.TrimSpace(req.RawContent), Source: SourceFallback, Reason: reason}
 }
