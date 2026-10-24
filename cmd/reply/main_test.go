@@ -400,3 +400,62 @@ func TestInvocationShapeCannotBeSpoofed(t *testing.T) {
 		t.Fatal("unknown action accepted")
 	}
 }
+
+// A stage that failed after its retries ends with a receipt that says so,
+// and the link stops working rather than waiting on a stopped execution.
+func TestBrokenStageIsRecorded(t *testing.T) {
+	f := newFixture(t)
+	if err := f.state(t, "record_broken", map[string]any{"stage": "Attempt", "tier": "2", "error": "Lambda.TooManyRequestsException"}); err != nil {
+		t.Fatal(err)
+	}
+	events := f.chain(t)
+	if got := types(events); got != "FAILED" {
+		t.Fatalf("chain = %s", got)
+	}
+	m := events[0].Metadata
+	if m["released"] != "false" || m["stage"] != "Attempt" || m["tier"] != "2" || m["error"] != "Lambda.TooManyRequestsException" ||
+		m["reason"] != "promise broken: Attempt could not complete; nothing was released" {
+		t.Fatalf("metadata = %v", m)
+	}
+	if s := f.slot(t); s.ClosedReason != "failed" {
+		t.Fatalf("slot closed reason = %q", s.ClosedReason)
+	}
+	if res := f.post(t, "direction", ""); res.StatusCode != http.StatusGone || len(f.sfn.calls) != 0 {
+		t.Fatalf("answer after a broken stage: status %d", res.StatusCode)
+	}
+}
+
+// A stage can fail after it wrote its own terminal receipt. The broken
+// receipt must not land on top of it and contradict it.
+func TestBrokenNeverFollowsATerminalReceipt(t *testing.T) {
+	f := newFixture(t)
+	f.arm(t)
+	if err := f.state(t, "record_timeout", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.state(t, "record_broken", map[string]any{"stage": "TimedOut", "error": "Lambda.ServiceException"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := types(f.chain(t)); got != "TIMED_OUT" {
+		t.Fatalf("chain = %s", got)
+	}
+}
+
+// The stage goes into a signed receipt, so an unknown one is refused. The
+// error name is checked too: anything shaped like a message is not written.
+func TestBrokenWritesOnlyKnownShapes(t *testing.T) {
+	f := newFixture(t)
+	if err := f.state(t, "record_broken", map[string]any{"stage": "Anything", "error": "States.TaskFailed"}); err == nil {
+		t.Fatal("unknown stage accepted")
+	}
+	if err := f.state(t, "record_broken", map[string]any{"stage": "Release", "error": "reply: refusing to release esc-1: recorded decision is \"\""}); err != nil {
+		t.Fatal(err)
+	}
+	events := f.chain(t)
+	if got := types(events); got != "FAILED" || events[0].Metadata["error"] != "unrecognized" {
+		t.Fatalf("chain = %s %v", got, events[0].Metadata)
+	}
+	if _, ok := events[0].Metadata["tier"]; ok {
+		t.Fatal("tier written for a stage that is not Attempt")
+	}
+}

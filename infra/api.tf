@@ -29,6 +29,26 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 5
     throttling_rate_limit  = 2
   }
+
+  # Every raise that gets through is a real email to a real person, and the
+  # attention budget that should cap them is still kept per execution
+  # environment. This bounds the rate, about three a minute, not the volume.
+  route_settings {
+    route_key              = "POST /raise"
+    throttling_burst_limit = 1
+    throttling_rate_limit  = 0.05
+  }
+
+  # The account allows ten concurrent Lambda executions across every
+  # function. Polling and refreshing the chain must not take the slots a
+  # clinician's POST /reply needs.
+  route_settings {
+    route_key              = "GET /escalation/{id}"
+    throttling_burst_limit = 2
+    throttling_rate_limit  = 1
+  }
+
+  depends_on = [aws_apigatewayv2_route.fn]
 }
 
 locals {

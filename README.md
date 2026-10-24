@@ -118,6 +118,39 @@ Known gap: the dignity pipeline (coalescing, the attention budget, quiet
 hours) still keeps its state in memory per execution environment. Its
 decisions hold across warm invocations of `attempt`, not across cold starts.
 
+## Throttling and failed stages
+
+The account allows ten concurrent Lambda executions, shared by every
+function. Two limits keep any one caller from taking them all, and the state
+machine is written so that running out of them is never silent.
+
+- **`POST /raise` is limited to about three a minute** (0.05 per second,
+  burst 1). Every raise that gets through becomes a real email to a real
+  person. This bounds the rate, not the volume: three a minute sustained is
+  still a great deal of email. Nothing caps the total today, because the
+  attention budget is kept per execution environment, as stated above. The
+  real cap arrives when that budget is kept in the table.
+- **`GET /escalation/{id}` is limited to about one a second** (burst 2), so
+  polling and refreshing cannot take the slots a clinician's `POST /reply`
+  needs. API Gateway enforces these limits approximately. Under test it let
+  through more than the burst, sometimes all of a burst of thirty.
+- **A throttled invocation is retried, and nothing else is.** Every Lambda
+  task in the state machine retries `Lambda.TooManyRequestsException`, about
+  two minutes of backoff in all. That error means Lambda refused the call
+  before the function ran, so the retry repeats an invocation, not a
+  delivery. `Lambda.ServiceException` is not retried, because it can arrive
+  after the function ran, and a re-run attempt would page the person twice.
+- **A stage that still fails writes a receipt.** The state machine catches
+  the error, and `reply` writes `FAILED` with the stage, the AWS error name,
+  and `released: false`. The execution then ends failed. The reply link
+  stops working, rather than leaving the person on "not ready yet".
+- **One limit the chain cannot cover.** That receipt is written by a Lambda,
+  because only a Lambda holds the signing key. If that Lambda cannot be
+  invoked either, nothing can be signed. The execution fails on the Lambda
+  error itself rather than on `PromiseBroken`, the chain ends with no
+  receipt saying why, and the only record is the Step Functions execution
+  history.
+
 ## Not yet built
 
 - AWS CDS providers: `socialmessaging`, `sesv2`, `pinpoint-sms-voice-v2` (week 3)

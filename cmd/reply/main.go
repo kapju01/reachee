@@ -6,7 +6,9 @@
 //     the answer and hands it to the waiting execution.
 //   - The state machine: "arm" stores the task token once the execution is
 //     holding, and "release", "record_denial", and "record_timeout" write the
-//     receipt for how the hold ended.
+//     receipt for how the hold ended. "record_broken" writes the receipt for
+//     a stage that failed after its retries, so the execution does not end
+//     with nothing saying why.
 //
 // A held action is released by a person's answer and nothing else: not a
 // timeout, not a default, not a click this handler had to guess about.
@@ -23,6 +25,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -81,6 +84,9 @@ type stateInput struct {
 	EscalationID string  `json:"escalation_id"`
 	TaskToken    string  `json:"task_token"`
 	Answer       *answer `json:"answer"`
+	Stage        string  `json:"stage"`
+	Error        string  `json:"error"`
+	Tier         string  `json:"tier"`
 }
 
 // answer is the SendTaskSuccess output: the classification and a hash of the
@@ -120,6 +126,8 @@ func (h *replier) handle(ctx context.Context, raw json.RawMessage) (any, error) 
 		return nil, h.recordDenial(ctx, in)
 	case "record_timeout":
 		return nil, h.recordTimeout(ctx, in)
+	case "record_broken":
+		return nil, h.recordBroken(ctx, in)
 	default:
 		return nil, fmt.Errorf("reply: unsupported action %q", in.Action)
 	}
@@ -180,6 +188,65 @@ func (h *replier) recordTimeout(ctx context.Context, in stateInput) error {
 		"released": "false",
 		"reason":   "no answer within the declared window; a timeout is not consent",
 	})
+}
+
+// brokenStages are the Task states whose Catch routes here. The stage arrives
+// as a literal from the definition, but it is still checked: it is written
+// into a signed receipt.
+var brokenStages = map[string]bool{"Attempt": true, "AwaitAnswer": true, "Release": true, "Denied": true, "TimedOut": true}
+
+// errorName matches the error names Step Functions and Lambda report, such as
+// Lambda.TooManyRequestsException. The Catch's Cause is free text and may
+// carry a function's error message, so it is never passed in.
+var errorName = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,100}$`)
+
+// recordBroken writes FAILED for a stage that ended in an error after its
+// retries. It closes the reply window first, so a link clicked later is
+// refused instead of waiting on an execution that has stopped. A chain that
+// already ends in a terminal receipt is left alone: a stage can fail after
+// writing its receipt, and a second terminal receipt would contradict it.
+func (h *replier) recordBroken(ctx context.Context, in stateInput) error {
+	if !brokenStages[in.Stage] {
+		return fmt.Errorf("reply: record_broken for unknown stage %q", in.Stage)
+	}
+	if err := ddb.CloseReply(ctx, h.db, h.table, in.EscalationID, "failed", h.now()); err != nil {
+		return err
+	}
+	chain, err := ddb.ReadChain(ctx, h.db, h.table, in.EscalationID)
+	if err != nil {
+		return err
+	}
+	if n := len(chain); n > 0 && terminal(chain[n-1]) {
+		log.Printf("reply: %s already ends in %s; %s failure not recorded over it", in.EscalationID, chain[n-1].EventType, in.Stage)
+		return nil
+	}
+	name := in.Error
+	if !errorName.MatchString(name) {
+		name = "unrecognized"
+	}
+	meta := map[string]string{
+		"released": "false",
+		"stage":    in.Stage,
+		"error":    name,
+		"reason":   "promise broken: " + in.Stage + " could not complete; nothing was released",
+	}
+	if in.Stage == "Attempt" && in.Tier != "" {
+		meta["tier"] = in.Tier
+	}
+	return h.emitFor(ctx, in.EscalationID, audit.TypeFailed, "", meta)
+}
+
+// terminal reports whether e ends a hold. A FAILED receipt is terminal only
+// when it carries released; a tier's FAILED does not.
+func terminal(e audit.Event) bool {
+	switch e.EventType {
+	case audit.TypeResolved, audit.TypeDenied, audit.TypeTimedOut:
+		return true
+	case audit.TypeFailed:
+		_, ok := e.Metadata["released"]
+		return ok
+	}
+	return false
 }
 
 func (h *replier) emitFor(ctx context.Context, escalationID, eventType, hash string, meta map[string]string) error {

@@ -124,6 +124,14 @@ func summarize(id string, chain []audit.Event) (summary, error) {
 		case audit.TypeResolved, audit.TypeDenied, audit.TypeTimedOut:
 			s.Outcome = e.EventType
 			s.Released = e.EventType == audit.TypeResolved && e.Metadata["released"] == "true"
+		case audit.TypeFailed:
+			// A tier's FAILED is not an outcome; the walk goes on. A stage
+			// that failed after its retries ends the hold, and says so with
+			// released.
+			if _, ok := e.Metadata["released"]; ok {
+				s.Outcome = e.EventType
+				s.Released = false
+			}
 		}
 	}
 	return s, nil

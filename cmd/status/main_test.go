@@ -243,3 +243,18 @@ func TestParsePublicKey(t *testing.T) {
 		}
 	}
 }
+
+// A tier's FAILED leaves the escalation open. A broken stage's FAILED ends
+// it, and the summary must not read that as still waiting.
+func TestBrokenStageIsAnOutcome(t *testing.T) {
+	f := newFixture(t)
+	f.emit(t, audit.TypePromised, "", nil)
+	f.emit(t, audit.TypeFailed, "", map[string]string{"tier": "1", "channel": "whatsapp"})
+	if s := decode(t, f.get(t, id, nil).Body); s.Outcome != "" {
+		t.Fatalf("a tier failure ended the escalation: outcome %q", s.Outcome)
+	}
+	f.emit(t, audit.TypeFailed, "", map[string]string{"stage": "Attempt", "released": "false"})
+	if s := decode(t, f.get(t, id, nil).Body); s.Outcome != audit.TypeFailed || s.Released {
+		t.Fatalf("broken stage: outcome %q released %v", s.Outcome, s.Released)
+	}
+}

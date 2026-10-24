@@ -7,8 +7,20 @@
 # receipt: attempt writes the verdict and exhaustion receipts itself, and
 # reply writes the rest.
 #
-# No state retries. A retried Attempt is a second page for the same event,
-# and retry belongs to the dispatcher and the breaker inside attempt.
+# Every Lambda task retries Lambda.TooManyRequestsException and nothing else.
+# That retries the invocation, not the delivery: Lambda refused the call
+# before the function ran, so no provider was touched and nothing was
+# written. Retrying a delivery still belongs to the dispatcher and the breaker
+# inside attempt. Lambda.ServiceException is not retried, because it can
+# arrive after the function ran, and a re-run Attempt is a second page for
+# the same event, with a new link that kills the first.
+#
+# A task that still fails is caught. Its stage is named by a Pass state, and
+# RecordBroken has reply write a FAILED receipt saying which stage broke and
+# that nothing was released, so the execution never ends after PROMISED with
+# nothing saying why. RecordBroken retries throttling like any task. If it
+# cannot be invoked at all, nothing can be signed, and the execution fails
+# with the receipt missing; the README names that limit.
 
 data "aws_iam_policy_document" "sfn_assume" {
   statement {
@@ -51,10 +63,24 @@ locals {
   attempt_arn = aws_lambda_function.fn["attempt"].arn
   reply_arn   = aws_lambda_function.fn["reply"].arn
 
+  # About two minutes of backoff in all: 2, 4, 8, 16, 32, 64 seconds.
+  invoke_retry = [
+    {
+      ErrorEquals     = ["Lambda.TooManyRequestsException"]
+      IntervalSeconds = 2
+      BackoffRate     = 2
+      MaxAttempts     = 6
+    },
+  ]
+
+  # The Lambda tasks whose failure ends the execution with a broken-promise
+  # receipt. reply checks the same list before writing a stage into a receipt.
+  broken_stages = ["Attempt", "AwaitAnswer", "Release", "Denied", "TimedOut"]
+
   definition = {
     Comment = "Reachee escalation: walk the ladder, hold for an answer, release only on direction."
     StartAt = "Attempt"
-    States = {
+    States = merge({
       # Walks exactly one tier. Execution input is {escalation_id, tier}.
       # attempt returns {status, next_tier?, timeout_seconds}. When the
       # attention gates stop the escalation, status is the verdict; when the
@@ -72,6 +98,8 @@ locals {
         }
         ResultSelector = { "outcome.$" = "$.Payload" }
         ResultPath     = "$.attempt"
+        Retry          = local.invoke_retry
+        Catch          = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "AttemptBroke" }]
         Next           = "RouteAttempt"
       }
 
@@ -137,12 +165,14 @@ locals {
           }
         }
         ResultPath = "$.answer"
+        Retry      = local.invoke_retry
         Catch = [
           {
             ErrorEquals = ["States.Timeout"]
             ResultPath  = "$.timeout"
             Next        = "TimedOut"
           },
+          { ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "AwaitAnswerBroke" },
         ]
         Next = "DecideAnswer"
       }
@@ -172,7 +202,9 @@ locals {
             "answer.$"        = "$.answer"
           }
         }
-        End = true
+        Retry = local.invoke_retry
+        Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "ReleaseBroke" }]
+        End   = true
       }
 
       Denied = {
@@ -186,7 +218,9 @@ locals {
             "answer.$"        = "$.answer"
           }
         }
-        End = true
+        Retry = local.invoke_retry
+        Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "DeniedBroke" }]
+        End   = true
       }
 
       # A timeout is not consent. It is recorded as a timeout and ends here.
@@ -200,7 +234,9 @@ locals {
             "escalation_id.$" = "$.escalation_id"
           }
         }
-        End = true
+        Retry = local.invoke_retry
+        Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "TimedOutBroke" }]
+        End   = true
       }
 
       # Reaching nobody is a failure even when every component reported
@@ -211,7 +247,45 @@ locals {
         Error = "LadderExhausted"
         Cause = "No tier delivered. attempt has written the receipts."
       }
-    }
+      }, {
+      # Names the stage that broke, and passes on only the error's name. The
+      # Catch's Cause is free text and can carry a function's error message,
+      # so it stays in the execution history and out of the chain.
+      for stage in local.broken_stages : "${stage}Broke" => {
+        Type = "Pass"
+        Parameters = merge({
+          "escalation_id.$" = "$.escalation_id"
+          stage             = stage
+          "error.$"         = "$.failure.Error"
+        }, stage == "Attempt" ? { "tier.$" = "States.Format('{}', $.tier)" } : { tier = "" })
+        Next = "RecordBroken"
+      }
+      }, {
+      RecordBroken = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = local.reply_arn
+          Payload = {
+            action            = "record_broken"
+            "escalation_id.$" = "$.escalation_id"
+            "stage.$"         = "$.stage"
+            "error.$"         = "$.error"
+            "tier.$"          = "$.tier"
+          }
+        }
+        Retry = local.invoke_retry
+        Next  = "Broken"
+      }
+
+      # A stage failed and the receipt says which. Nothing was released, and
+      # the execution ends failed, not succeeded.
+      Broken = {
+        Type  = "Fail"
+        Error = "PromiseBroken"
+        Cause = "A stage failed after its retries. The chain's last receipt names it."
+      }
+    })
   }
 }
 
