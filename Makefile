@@ -1,5 +1,5 @@
 GO ?= go
-LAMBDAS := raise attempt reply
+LAMBDAS := raise attempt reply status
 
 .PHONY: build lambdas apply test cover run fmt vet tidy clean FORCE
 

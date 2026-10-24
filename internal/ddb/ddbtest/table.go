@@ -91,9 +91,28 @@ func (f *Table) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dyn
 	sort.Ints(seqs)
 	out := &dynamodb.QueryOutput{}
 	for _, n := range seqs {
-		out.Items = append(out.Items, f.items[e][n])
+		out.Items = append(out.Items, project(f.items[e][n], in))
 	}
 	return out, nil
+}
+
+// project returns only the attributes a ProjectionExpression names, as
+// DynamoDB does, so a test can show what a reader was never handed.
+func project(item map[string]types.AttributeValue, in *dynamodb.QueryInput) map[string]types.AttributeValue {
+	if in.ProjectionExpression == nil {
+		return item
+	}
+	out := map[string]types.AttributeValue{}
+	for _, name := range strings.Split(*in.ProjectionExpression, ",") {
+		name = strings.TrimSpace(name)
+		if real, ok := in.ExpressionAttributeNames[name]; ok {
+			name = real
+		}
+		if v, ok := item[name]; ok {
+			out[name] = v
+		}
+	}
+	return out
 }
 
 // Items returns every item stored under an escalation, in seq order.

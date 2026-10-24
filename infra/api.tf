@@ -1,7 +1,9 @@
 # POST /raise is called by the agent or the demo page. GET /reply is the link
 # in the email and only renders the choice: mail scanners open links before a
 # person does, so a GET must consume nothing. POST /reply records the
-# decision. Browser calls are accepted from the demo origin only.
+# decision. GET /escalation/{id} returns one escalation's chain, or with
+# ?format=bundle the bundle verify/ consumes. Browser calls are accepted from
+# the demo origin only.
 
 resource "aws_apigatewayv2_api" "http" {
   name          = local.name
@@ -36,6 +38,8 @@ locals {
     "POST /raise" = "raise"
     "GET /reply"  = "reply"
     "POST /reply" = "reply"
+
+    "GET /escalation/{id}" = "status"
   }
 
   api_functions = toset(values(local.routes))
@@ -60,7 +64,7 @@ resource "aws_apigatewayv2_route" "fn" {
 # cannot invoke a function through a route that does not belong to it.
 resource "aws_lambda_permission" "api" {
   for_each      = local.routes
-  statement_id  = "AllowHttpApi-${replace(replace(each.key, " /", "-"), "/", "-")}"
+  statement_id  = "AllowHttpApi-${replace(replace(replace(each.key, " /", "-"), "/", "-"), "/[{}]/", "")}"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn[each.value].function_name
   principal     = "apigateway.amazonaws.com"

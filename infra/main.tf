@@ -43,7 +43,10 @@ locals {
   name       = "reachee"
   account_id = data.aws_caller_identity.current.account_id
 
-  functions = toset(["raise", "attempt", "reply"])
+  functions = toset(["raise", "attempt", "reply", "status"])
+
+  # The functions that write receipts, and so sign them. status only reads.
+  signers = toset(["raise", "attempt", "reply"])
 
   # The declared contact policy, rendered with the one verified recipient so
   # the real address lives in tfvars and never in the repo. It is the same

@@ -181,6 +181,7 @@ cmd/reachee      local CLI and the chain exporter
 cmd/raise        Lambda: returns a receipt, starts the execution
 cmd/attempt      Lambda: walks exactly one tier
 cmd/reply        Lambda: validates the token, classifies, releases
+cmd/status       Lambda: returns one escalation's chain, or its bundle
 internal/        the escalation engine
 infra/           Terraform root module
 verify/          independent chain verifier, no shared code

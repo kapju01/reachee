@@ -25,7 +25,7 @@ Week 2 skeleton. The pipeline runs end to end against mock providers. The three 
 | `internal/dignity` | Coalescing, rate limiting, and quiet hours. Runs before any provider is touched. |
 | `internal/circuit` | Three-state breaker per provider. Skips a broken provider instead of retrying it into the ground. |
 | `internal/providers` | The `Messenger` contract plus a recording mock. WhatsApp, SES, and SMS implement this interface. |
-| `internal/empathy` | Humanizes the message, and discloses in the payload and the audit log when it could not. |
+| `internal/empathy` | Humanizes the message. When it could not, the SENT receipt says so (`empathy_source`, `empathy_reason`); the recipient's message carries no marker. |
 | `internal/audit` | Hash-chained, Ed25519-signed events. Content hashes only, never content. |
 | `internal/dispatcher` | Walks the ladder in order and emits an event for every promise kept, broken, or skipped. |
 
@@ -36,6 +36,44 @@ Week 2 skeleton. The pipeline runs end to end against mock providers. The three 
 3. A skipped tier, a suppressed escalation, and a deferred one each produce an audit event. Silence is never an outcome.
 4. Failover is tiered, not active-active. Reaching a human twice for one event costs their trust.
 5. The empathy layer marks its own degradation. Nothing claims a humanized message it did not produce.
+
+## Reading an escalation's chain
+
+Anyone holding an escalation id can read its chain:
+
+    curl "$API/escalation/<id>"                  # receipts, decision, released
+    curl "$API/escalation/<id>?format=bundle" \
+      | python3 verify/verify_chain.py /dev/stdin --pubkey "$PUBKEY_URL"
+
+The default response lists each receipt with its event type, hashes,
+timestamp, and provider. It also gives the decision, taken from the
+`ACKNOWLEDGED` receipt, and whether the action was released, taken from the
+terminal receipt. `?format=bundle` returns the public key, the genesis hash,
+and every event exactly as it was signed. That is the input
+`verify/verify_chain.py` reads, so a live escalation verifies in one pipe.
+
+This exposure is deliberate. The endpoint has no authentication; the id is
+the only thing a caller needs.
+
+- **Ids are hard to guess.** Escalation ids are UUIDv7: a millisecond
+  timestamp followed by 74 random bits from `crypto/rand`. The timestamp
+  reveals when an escalation was raised. The random bits put enumeration out of
+  reach.
+- **The chain carries no message content.** It holds content hashes, never
+  the payload, the subject, or the clinician's note, and the verifier fails a
+  bundle with any field long enough to hold a message body.
+- **The role enforces what is withheld.** The request record and the reply
+  slot sit in the same DynamoDB partition as the chain, so the status
+  Lambda's role does more than grant `dynamodb:Query`. Its conditions refuse
+  any query that asks for more than the `event` attribute. The handler cannot
+  return what it cannot read.
+- **The contact is named.** Each receipt carries `recipient_id`, the
+  Heart-Map contact handle, which is already in the committed Heart-Map.
+  Knowing that a clinician was reached is part of what the chain proves.
+
+Known gap: receipts also carry the calling agent's `correlation_id`
+verbatim. It is caller-supplied free text, so it can hold whatever the caller
+put there. Replacing it with a hash in the chain is the next change.
 
 ## Not yet built
 

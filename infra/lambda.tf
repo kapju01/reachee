@@ -24,19 +24,20 @@ resource "aws_iam_role" "fn" {
 }
 
 locals {
-  # Every receipt is signed when written, so all three read the key. Logs
-  # are scoped to the function's own group rather than logs:*.
+  # Every receipt is signed when written, so the signers read the key; status
+  # writes none and cannot. Logs are scoped to the function's own group
+  # rather than logs:*.
   common_statements = {
-    for fn in local.functions : fn => [
-      {
+    for fn in local.functions : fn => concat(
+      [{
         actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         resources = ["${aws_cloudwatch_log_group.fn[fn].arn}:*"]
-      },
-      {
+      }],
+      contains(local.signers, fn) ? [{
         actions   = ["secretsmanager:GetSecretValue"]
         resources = [aws_secretsmanager_secret.signing_key.arn]
-      },
-    ]
+      }] : [],
+    )
   }
 
   own_statements = {
@@ -88,6 +89,32 @@ locals {
         resources = ["*"]
       },
     ]
+
+    # status is reachable by anyone holding an escalation id, so its role is
+    # the boundary, not its code. The request record and the reply slot share
+    # the chain's partition, and an unconditioned Query would return the
+    # payload, subject, note, nonce, and task token. These conditions grant
+    # Query only when it names the event attribute alone and says so with
+    # Select; ForAllValues passes on an absent key, so Select is tested
+    # without IfExists and a query that omits it is refused.
+    status = [
+      {
+        actions   = ["dynamodb:Query"]
+        resources = [aws_dynamodb_table.escalations.arn]
+        conditions = [
+          {
+            test     = "ForAllValues:StringEquals"
+            variable = "dynamodb:Attributes"
+            values   = ["escalation_id", "seq", "event"]
+          },
+          {
+            test     = "StringEquals"
+            variable = "dynamodb:Select"
+            values   = ["SPECIFIC_ATTRIBUTES"]
+          },
+        ]
+      },
+    ]
   }
 
   env = {
@@ -108,12 +135,19 @@ locals {
       REACHEE_AUDIT_TABLE = aws_dynamodb_table.escalations.name
       REACHEE_SIGNING_KEY = aws_secretsmanager_secret.signing_key.arn
     }
+    # The same file web.tf publishes, so a bundle names the key a verifier
+    # will fetch.
+    status = {
+      REACHEE_AUDIT_TABLE = aws_dynamodb_table.escalations.name
+      REACHEE_PUBLIC_KEY  = trimspace(file("${path.module}/../demo/keys/reachee-ed25519.pub"))
+    }
   }
 
   timeouts = {
     raise   = 10
     attempt = 30
     reply   = 10
+    status  = 10
   }
 }
 
@@ -125,6 +159,15 @@ data "aws_iam_policy_document" "fn" {
     content {
       actions   = statement.value.actions
       resources = statement.value.resources
+
+      dynamic "condition" {
+        for_each = lookup(statement.value, "conditions", [])
+        content {
+          test     = condition.value.test
+          variable = condition.value.variable
+          values   = condition.value.values
+        }
+      }
     }
   }
 }

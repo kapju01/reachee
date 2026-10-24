@@ -35,6 +35,12 @@ type Client interface {
 	Query(ctx context.Context, in *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 }
 
+// Querier is the one call a chain reader makes. The status Lambda's role
+// grants nothing else.
+type Querier interface {
+	Query(ctx context.Context, in *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+}
+
 // ErrNotFound means no request record exists for the escalation.
 var ErrNotFound = errors.New("ddb: escalation not found")
 
@@ -134,12 +140,25 @@ type Sink struct {
 }
 
 // NewSink loads the escalation's existing chain so audit.NewLogger can find
-// its head. The read is consistent: a stale head would fork the chain.
+// its head.
 func NewSink(ctx context.Context, c Client, table, escalationID string) (*Sink, error) {
 	if escalationID == "" {
 		return nil, errors.New("ddb: sink needs an escalation id")
 	}
-	s := &Sink{client: c, table: table, escalationID: escalationID}
+	events, err := ReadChain(ctx, c, table, escalationID)
+	if err != nil {
+		return nil, err
+	}
+	return &Sink{client: c, table: table, escalationID: escalationID, events: events}, nil
+}
+
+// ReadChain returns one escalation's chain in order, empty if it has none.
+// The read is consistent: a stale head would fork the chain. It asks for the
+// event attribute alone, with Select set explicitly, because the status role
+// is granted Query only on those terms. The key condition starts at seq 1, so
+// the request record and the reply slot are never read.
+func ReadChain(ctx context.Context, c Querier, table, escalationID string) ([]audit.Event, error) {
+	var events []audit.Event
 	var start map[string]types.AttributeValue
 	for {
 		out, err := c.Query(ctx, &dynamodb.QueryInput{
@@ -149,8 +168,11 @@ func NewSink(ctx context.Context, c Client, table, escalationID string) (*Sink, 
 				":e":     &types.AttributeValueMemberS{Value: escalationID},
 				":first": &types.AttributeValueMemberN{Value: "1"},
 			},
-			ConsistentRead:    aws.Bool(true),
-			ExclusiveStartKey: start,
+			ProjectionExpression:     aws.String("#ev"),
+			ExpressionAttributeNames: map[string]string{"#ev": "event"},
+			Select:                   types.SelectSpecificAttributes,
+			ConsistentRead:           aws.Bool(true),
+			ExclusiveStartKey:        start,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("ddb: load chain %s: %w", escalationID, err)
@@ -164,10 +186,10 @@ func NewSink(ctx context.Context, c Client, table, escalationID string) (*Sink, 
 			if err := json.Unmarshal([]byte(raw.Value), &e); err != nil {
 				return nil, fmt.Errorf("ddb: chain %s: %w", escalationID, err)
 			}
-			s.events = append(s.events, e)
+			events = append(events, e)
 		}
 		if len(out.LastEvaluatedKey) == 0 {
-			return s, nil
+			return events, nil
 		}
 		start = out.LastEvaluatedKey
 	}
