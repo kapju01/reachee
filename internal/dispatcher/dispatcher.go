@@ -305,7 +305,7 @@ func (d *Dispatcher) emit(req Request, provider, eventType, contentHash string, 
 		}
 	}
 	if req.CorrelationID != "" {
-		clean["correlation_id"] = req.CorrelationID
+		clean[audit.MetaCorrelationHash] = audit.CorrelationHash(req.CorrelationID)
 	}
 	clean["priority"] = string(req.Priority)
 	return d.Audit.Emit(audit.Event{

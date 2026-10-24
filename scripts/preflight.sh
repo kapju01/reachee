@@ -101,11 +101,27 @@ if python3 verify/verify_chain.py "$tampered" >/dev/null 2>&1; then
 fi
 pass "tampering rejected"
 
+# A body hidden in metadata must be named as such, not merely fail as a bad
+# signature, so the check is shown to look inside metadata.
+leaky="$(mktemp -t reachee-leaky)"
+trap 'rm -f "$tmp" "$tampered" "$leaky"' EXIT
+python3 - "$tmp" "$leaky" <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1]))
+b["events"][0].setdefault("metadata", {})["note"] = "x" * 201
+json.dump(b, open(sys.argv[2], "w"))
+PY
+leak_report="$(python3 verify/verify_chain.py "$leaky" 2>&1 || true)"
+if ! grep -q '\.metadata\.note$' <<<"$leak_report"; then
+  fail "the verifier did not flag a body-sized metadata value"
+fi
+pass "body-sized metadata value flagged"
+
 # -- 5. a real send --------------------------------------------------------
 if [ "$SEND" -eq 1 ]; then
   head "5. live SES send"
   body="$(mktemp -t reachee-content)"
-  trap 'rm -f "$tmp" "$tampered" "$body"' EXIT
+  trap 'rm -f "$tmp" "$tampered" "$leaky" "$body"' EXIT
   cat > "$body" <<JSON
 { "Simple": {
     "Subject": { "Data": "Reachee preflight", "Charset": "UTF-8" },

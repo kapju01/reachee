@@ -41,6 +41,14 @@ The verifying key is
 `prev_hash` links and signatures. The tables below show the receipt sequence;
 the hashes and signatures they omit are in the bundles.
 
+All three runs predate the change that replaced `correlation_id` in receipts
+with `correlation_hash`, the SHA-256 of the caller's id. Their receipts carry
+the plaintext correlation ids shown in the tables below. The bundles are left
+exactly as exported; regenerating them would replace the evidence, not fix it.
+They still verify, because the verifier recomputes the canonical form over
+whatever metadata keys an event carries, in sorted order. Receipts written
+after the change carry `correlation_hash` and no `correlation_id`.
+
 ## Conditions common to all three
 
 - State machine: `arn:aws:states:us-west-2:335019467476:stateMachine:reachee-escalation`

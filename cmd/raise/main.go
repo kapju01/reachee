@@ -160,7 +160,7 @@ func (h *raiser) handle(ctx context.Context, ev events.APIGatewayV2HTTPRequest) 
 		"promise":  promise,
 	}
 	if req.CorrelationID != "" {
-		meta["correlation_id"] = req.CorrelationID
+		meta[audit.MetaCorrelationHash] = audit.CorrelationHash(req.CorrelationID)
 	}
 	promised, err := logger.Emit(audit.Event{
 		RequestID:   id,

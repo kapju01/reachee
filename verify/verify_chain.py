@@ -198,15 +198,28 @@ def verify_bundle(bundle, pubkey_hex):
     return results
 
 
+BODY_THRESHOLD = 200
+
+
 def has_message_content(bundle):
-    """A bundle should carry hashes, never bodies. Flag anything suspicious."""
+    """A bundle should carry hashes, never bodies. Flag anything suspicious.
+
+    Every string field is checked, metadata values included, against one
+    threshold. The longest legitimate value, the promise text, is well under
+    it. This catches something large enough to be a message body. It cannot
+    catch a short identifier, and no check on the read side can, which is why
+    the content rule is enforced where receipts are written.
+    """
     offenders = []
     for event in bundle["events"]:
+        eid = event.get("event_id", "?")
         for key, value in event.items():
-            if key == "metadata":
-                continue
-            if isinstance(value, str) and len(value) > 200:
-                offenders.append("%s.%s" % (event.get("event_id", "?"), key))
+            if key == "metadata" and isinstance(value, dict):
+                for mkey, mvalue in value.items():
+                    if isinstance(mvalue, str) and len(mvalue) > BODY_THRESHOLD:
+                        offenders.append("%s.metadata.%s" % (eid, mkey))
+            elif isinstance(value, str) and len(value) > BODY_THRESHOLD:
+                offenders.append("%s.%s" % (eid, key))
     return offenders
 
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -226,6 +227,52 @@ func TestPayloadNeverReachesTheAuditLog(t *testing.T) {
 	for k, v := range e.Metadata {
 		if v == req.Payload {
 			t.Fatalf("metadata key %q leaked the payload", k)
+		}
+	}
+}
+
+// The chain is readable by anyone holding the escalation id, and a
+// correlation id is caller free text. Every receipt carries its hash and none
+// carries the plaintext.
+func TestCorrelationIDEntersTheChainOnlyAsAHash(t *testing.T) {
+	now := daytime()
+	h := newHarness(t, -1, 0, func() time.Time { return now })
+	req := request("r1", providers.P1)
+	if _, err := h.d.Dispatch(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	events := h.sink.All()
+	if len(events) < 2 {
+		t.Fatalf("want a failed tier and a send, got %d events", len(events))
+	}
+	for _, e := range events {
+		if _, ok := e.Metadata["correlation_id"]; ok {
+			t.Fatalf("%s carries correlation_id", e.EventType)
+		}
+		if e.Metadata[audit.MetaCorrelationHash] != audit.HashContent(req.CorrelationID) {
+			t.Fatalf("%s correlation_hash = %q", e.EventType, e.Metadata[audit.MetaCorrelationHash])
+		}
+		for k, v := range e.Metadata {
+			if strings.Contains(v, req.CorrelationID) {
+				t.Fatalf("%s metadata %q carries the plaintext correlation id", e.EventType, k)
+			}
+		}
+	}
+}
+
+// No correlation id means no hash, so uncorrelated escalations do not all
+// share the hash of the empty string.
+func TestAbsentCorrelationWritesNoHash(t *testing.T) {
+	now := daytime()
+	h := newHarness(t, 0, 0, func() time.Time { return now })
+	req := request("r1", providers.P1)
+	req.CorrelationID = ""
+	if _, err := h.d.Dispatch(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range h.sink.All() {
+		if _, ok := e.Metadata[audit.MetaCorrelationHash]; ok {
+			t.Fatalf("%s carries a correlation hash with no correlation id", e.EventType)
 		}
 	}
 }

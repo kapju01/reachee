@@ -60,8 +60,23 @@ the only thing a caller needs.
   reveals when an escalation was raised. The random bits put enumeration out of
   reach.
 - **The chain carries no message content.** It holds content hashes, never
-  the payload, the subject, or the clinician's note, and the verifier fails a
-  bundle with any field long enough to hold a message body.
+  the payload, the subject, or the clinician's note. The verifier fails a
+  bundle in which any string field, metadata values included, runs past 200
+  characters. That detects something large enough to be a message body. It
+  cannot detect a short identifier, and nothing in the verifier can: a name or
+  a record number is just another short string. That limitation is why the
+  content rule is enforced where receipts are written, not where they are
+  read. Every value a receipt carries is a fixed string, a value from the
+  Heart-Map, a hash, or an id or error code an AWS service returned, with two
+  exceptions:
+  - `agent_id` is the calling agent's own string, written verbatim.
+  - `empathy_reason` carries a model's error text when the model fails. No
+    model is configured yet, so today it always reads "no model configured".
+- **Correlation ids enter as hashes.** A receipt carries `correlation_hash`,
+  the SHA-256 (lowercase hex) of the caller's `correlation_id` exactly as sent.
+  The plaintext stays on the request record, where coalescing reads it. A
+  caller confirms its own correlation by hashing its own id. With no
+  correlation id there is no hash.
 - **The role enforces what is withheld.** The request record and the reply
   slot sit in the same DynamoDB partition as the chain, so the status
   Lambda's role does more than grant `dynamodb:Query`. Its conditions refuse
@@ -70,10 +85,6 @@ the only thing a caller needs.
 - **The contact is named.** Each receipt carries `recipient_id`, the
   Heart-Map contact handle, which is already in the committed Heart-Map.
   Knowing that a clinician was reached is part of what the chain proves.
-
-Known gap: receipts also carry the calling agent's `correlation_id`
-verbatim. It is caller-supplied free text, so it can hold whatever the caller
-put there. Replacing it with a hash in the chain is the next change.
 
 ## Not yet built
 

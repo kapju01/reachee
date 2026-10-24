@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -108,6 +110,17 @@ func TestRaiseRecordsThePromiseAndStartsTheExecution(t *testing.T) {
 	if err := audit.Verify(events, pub); err != nil {
 		t.Fatal(err)
 	}
+	meta := events[0].Metadata
+	if _, ok := meta["correlation_id"]; ok {
+		t.Fatal("the caller's correlation id reached the chain in plaintext")
+	}
+	if got, want := meta["correlation_hash"], sha256hex("bed-4-k"); got != want {
+		t.Fatalf("correlation_hash = %q, want the SHA-256 of what the caller sent, %q", got, want)
+	}
+	stored, err := ddb.GetRequest(context.Background(), tbl, "t", out.EscalationID)
+	if err != nil || stored.CorrelationID != "bed-4-k" {
+		t.Fatalf("the request record must keep the plaintext for coalescing, got %q (%v)", stored.CorrelationID, err)
+	}
 	hash, _ := audit.SignedHash(events[0])
 	if out.ReceiptHash != hash || out.ChainHead != hash {
 		t.Fatalf("receipt_hash and chain_head must be the PROMISED receipt's signed hash")
@@ -191,4 +204,11 @@ func TestFailedStartIsRecordedAsABrokenPromise(t *testing.T) {
 	if out.ChainHead != head {
 		t.Fatal("chain_head must point at the FAILED receipt")
 	}
+}
+
+// sha256hex is computed here, not through audit.CorrelationHash, so the test
+// pins the rule a caller reproduces rather than the function that applies it.
+func sha256hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

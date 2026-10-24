@@ -55,6 +55,20 @@ func HashContent(content string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// CorrelationHash is how a caller's correlation id enters the chain: the
+// SHA-256 of the id exactly as sent, as lowercase hex, with no normalization.
+// The chain is readable by anyone holding an escalation id, and a correlation
+// id is caller free text that can name a patient, so the plaintext stays on
+// the request record. A caller confirms its own correlation by hashing its
+// own id. An empty id has no hash; it is omitted, not hashed, so uncorrelated
+// escalations do not all appear to share one.
+func CorrelationHash(id string) string {
+	return HashContent(id)
+}
+
+// MetaCorrelationHash is the metadata key CorrelationHash is written under.
+const MetaCorrelationHash = "correlation_hash"
+
 // NewEventID returns a UUIDv7 so event ids sort by time.
 func NewEventID() string {
 	var b [16]byte
