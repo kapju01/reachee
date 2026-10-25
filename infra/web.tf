@@ -40,6 +40,46 @@ resource "aws_s3_object" "pubkey" {
   content_type = "text/plain; charset=utf-8"
 }
 
+# What the page needs to talk to this deployment and nothing more: the API
+# it raises against, and the Heart-Map with every address and number taken
+# out. It is derived from the same document attempt loads, so the policy the
+# page shows cannot drift from the policy that runs. A judge's own deploy
+# writes its own.
+locals {
+  heartmap_doc = yamldecode(local.heartmap).contact
+
+  demo_config = {
+    api = aws_apigatewayv2_api.http.api_endpoint
+    policy = {
+      contact_id   = local.heartmap_doc.id
+      display_name = local.heartmap_doc.display_name
+      channels     = sort(keys(local.heartmap_doc.channels))
+      ladder       = local.heartmap_doc.failover_ladder
+      quiet_hours  = local.heartmap_doc.quiet_hours
+      rate_limit   = local.heartmap_doc.rate_limit
+    }
+    evidence = sort(tolist(fileset("${path.module}/../docs/evidence", "*.json")))
+  }
+}
+
+resource "aws_s3_object" "config" {
+  bucket       = aws_s3_bucket.demo.id
+  key          = "config.json"
+  content      = jsonencode(local.demo_config)
+  content_type = "application/json"
+}
+
+# The committed evidence chains, served beside the page so a judge can walk
+# them and download exactly what verify/ reads.
+resource "aws_s3_object" "evidence" {
+  for_each     = fileset("${path.module}/../docs/evidence", "*.json")
+  bucket       = aws_s3_bucket.demo.id
+  key          = "evidence/${each.value}"
+  source       = "${path.module}/../docs/evidence/${each.value}"
+  source_hash  = filemd5("${path.module}/../docs/evidence/${each.value}")
+  content_type = "application/json"
+}
+
 resource "aws_cloudfront_origin_access_control" "demo" {
   name                              = "${local.name}-demo"
   origin_access_control_origin_type = "s3"

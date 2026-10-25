@@ -18,7 +18,9 @@ REGION_EXPECTED="${AWS_REGION:-us-west-2}"
 SEND=0
 [ "${1:-}" = "--send" ] && SEND=1
 
+skipped=0
 pass() { printf '  ok    %s\n' "$1"; }
+skip() { printf '  SKIP  %s\n' "$1"; skipped=$((skipped + 1)); }
 fail() { printf '  FAIL  %s\n' "$1" >&2; exit 1; }
 head() { printf '\n%s\n' "$1"; }
 
@@ -73,6 +75,44 @@ pass "Go encoder matches the golden form"
 python3 verify/verify_chain.py --selftest testdata/canonical_golden.txt >/dev/null \
   || fail "the Python verifier no longer matches the golden canonical form"
 pass "Python verifier matches the golden form"
+
+# The demo page carries a third serializer and verifier, in the browser. Its
+# copy of the golden form must be the file itself, and its verifier block,
+# run as written, must agree with the golden form, accept every committed
+# evidence chain against the published key, and reject a tampered one.
+python3 - <<'PY' || fail "demo/index.html carries a golden form that is not testdata/canonical_golden.txt"
+import json, re
+page = open("demo/index.html", encoding="utf-8").read()
+literal = re.search(r"/\* golden:begin \*/\s*const GOLDEN = (.*?);\s*/\* golden:end \*/", page, re.S).group(1)
+assert json.loads(literal) == open("testdata/canonical_golden.txt", encoding="utf-8").read()
+PY
+pass "demo page carries the golden form"
+
+if command -v node >/dev/null 2>&1; then
+  node - <<'JS' || fail "the demo page's verifier disagrees with the golden form or the evidence"
+const fs = require("fs");
+const page = fs.readFileSync("demo/index.html", "utf8");
+const golden = fs.readFileSync("testdata/canonical_golden.txt", "utf8");
+const block = page.match(/\/\* verifier:begin([\s\S]*?)\/\* verifier:end \*\//)[1].replace(/^[\s\S]*?\*\//, "");
+const api = new Function(block + "; return {canonical, verifyBundle, tamperRejected};")();
+const pub = fs.readFileSync("demo/keys/reachee-ed25519.pub", "utf8").trim();
+(async () => {
+  if (api.canonical(JSON.parse(golden)) !== golden) throw new Error("golden parity");
+  const files = fs.readdirSync("docs/evidence").filter(f => f.endsWith(".json"));
+  if (!files.length) throw new Error("no evidence bundles");
+  for (const f of files) {
+    const b = JSON.parse(fs.readFileSync("docs/evidence/" + f, "utf8"));
+    const r = await api.verifyBundle(b, pub);
+    if (!r.signaturesChecked) throw new Error("node has no Ed25519 in WebCrypto");
+    if (!r.linksOK || !r.sigsOK || r.offenders.length) throw new Error(f + " did not verify");
+    if (!(await api.tamperRejected(b, pub))) throw new Error(f + ": tampering accepted");
+  }
+})().catch(e => { console.error(e.message); process.exit(1); });
+JS
+  pass "demo page verifier matches the golden form and verifies the committed evidence"
+else
+  skip "demo page verifier not run: node is not installed"
+fi
 
 # -- 4. a chain that a stranger can verify ---------------------------------
 head "4. round trip, signed in Go and verified in Python"
@@ -135,4 +175,8 @@ JSON
   pass "sent, MessageId $message_id"
 fi
 
-printf '\npreflight green\n'
+if [ "$skipped" -gt 0 ]; then
+  printf '\npreflight green, %d skipped\n' "$skipped"
+else
+  printf '\npreflight green\n'
+fi

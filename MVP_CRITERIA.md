@@ -55,9 +55,8 @@ decision, and it is not a release.
 
 ## 10. The chain verifies cold, with no message body stored
 
-Every step is signed and hash-chained onto the calling agent's chain head. A third party
-recomputes the chain against the published key, with no reading, identifier, or message
-body anywhere in the log.
+Every step is signed and hash-chained. A third party recomputes the chain against the
+published key, with no reading, identifier, or message body anywhere in the log.
 
 ---
 
@@ -76,9 +75,14 @@ body anywhere in the log.
 | 09 | `RESOLVED` receipt, released by the answer and nothing else |
 | 10 | Chain recomputed in the verifier's own browser |
 
-The single-file demo runs 01 through 05 and 07 through 09 in the browser. It demonstrates
-the logic of 06 and 10; the deployed prototype sends on SES v2 and verifies against the
-published key.
+The demo page reads real chains: a live escalation raised against the deployed stack, or
+one of the committed evidence runs. It lights a criterion only from receipts in the chain
+it is showing. 06 is shown by a real `SENT` receipt from SES v2. 10 is shown when the
+browser recomputes every hash link and, where WebCrypto supports Ed25519, checks every
+signature against the published key; where it does not, the page checks the links and
+prints the `verify_chain.py` command for the signatures. 02, 03, and 07 are not shown on
+the page: resolving the policy writes no receipt, a gate that lets a reach through writes
+none, and the delivered body is never served.
 
 ## Not claimed
 
