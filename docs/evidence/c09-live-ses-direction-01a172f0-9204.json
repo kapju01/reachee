@@ -1,0 +1,109 @@
+{
+  "public_key": "85c96a3b16a44e63e39da3ce3078119356ba0b5a9d60929c811e7c1d3b90b23e",
+  "genesis": "0000000000000000000000000000000000000000000000000000000000000000",
+  "events": [
+    {
+      "event_id": "01a172f0-923f-741d-a23f-46884cbbe3cf",
+      "event_type": "PROMISED",
+      "message_hash": "bcd63ab199fc9a403c5f439b588747b0ef7972685ee13b17f11736993fcf24eb",
+      "metadata": {
+        "agent_id": "rpm-vitals-monitor-07",
+        "correlation_hash": "a023c0c9a8cea12b62433784add0a6f30368db22e93d72804fdc2f8c926259e3",
+        "priority": "P1",
+        "promise": "attempt delivery on the declared ladder in order and report each outcome"
+      },
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a172f0-9204-7044-9291-8538c24969a1",
+      "signature": "e318f1b4c27d4d3b17e09d7dec01161f9c3f2814b1d03c35d852cd9d93c74bf56773ffb87c3dad03142b917acf9f0f9557a4132268febaf6b4909317f5551a03",
+      "timestamp": "2026-10-25T12:02:11.135422Z"
+    },
+    {
+      "event_id": "01a172f0-953a-7eba-add9-8ffdd8f1506f",
+      "event_type": "FAILED",
+      "message_hash": "bcd63ab199fc9a403c5f439b588747b0ef7972685ee13b17f11736993fcf24eb",
+      "metadata": {
+        "breaker_state": "OPEN",
+        "channel": "whatsapp",
+        "correlation_hash": "a023c0c9a8cea12b62433784add0a6f30368db22e93d72804fdc2f8c926259e3",
+        "priority": "P1",
+        "reason": "promise broken: no provider registered for channel whatsapp",
+        "tier": "1"
+      },
+      "prev_hash": "a1d2867aca64afe961b092c433d43d2f91f68272d0cac5ad273b551c38cf4f23",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a172f0-9204-7044-9291-8538c24969a1",
+      "signature": "87c1c14887c4c54cbde0ae873c94e0bd513815de3bd2230357fc26e934f6eb9d53b9a4db9e0bb644e47b03840d87fd80958f1110b28afabcdfb5fe86c61a750b",
+      "timestamp": "2026-10-25T12:02:11.898272Z"
+    },
+    {
+      "event_id": "01a172f0-9691-701b-b3fc-1a83c7665c2a",
+      "event_type": "SENT",
+      "message_hash": "bcd63ab199fc9a403c5f439b588747b0ef7972685ee13b17f11736993fcf24eb",
+      "metadata": {
+        "agent_id": "rpm-vitals-monitor-07",
+        "channel": "email",
+        "correlation_hash": "a023c0c9a8cea12b62433784add0a6f30368db22e93d72804fdc2f8c926259e3",
+        "empathy_reason": "no model configured",
+        "empathy_source": "fallback",
+        "priority": "P1",
+        "provider_msg_id": "010101a172f09605-e4424105-9e6f-45d7-accb-fef8512a068a-000000",
+        "tier": "2"
+      },
+      "prev_hash": "c6167569a18f097fbf4cfedb4d39957e8bf8ee0b1ae9b5be2202440fcb5a4618",
+      "provider_name": "ses-v2",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a172f0-9204-7044-9291-8538c24969a1",
+      "signature": "cb80e46155fbd36c41190bdddd8b12fc297f7a4ad773c36e3b9bf60c873f16d1db0124d094aad5cb34aeb0e79327efc20fc4fc18b57b345f4cbafba57f9f420e",
+      "timestamp": "2026-10-25T12:02:12.241717Z"
+    },
+    {
+      "event_id": "01a172f3-924f-7f22-8ac9-ad4e62cc536c",
+      "event_type": "RECEIVED",
+      "message_hash": "c6c62e93ee021206ec982363f075ff74d8083787fa7459ec077b35895ec03104",
+      "metadata": {
+        "via": "reply link"
+      },
+      "prev_hash": "b440abc787110b34bfc5af99f2c08efa38e31e0da0137f23076ea0880bdddc04",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a172f0-9204-7044-9291-8538c24969a1",
+      "signature": "cae4b2520e4153b3af19523914145eb93afde81dfdabc5005b91c2a10fd8735d688192614c09437e064da7122ab3631217db2f01c07fbe89ba793eabe307cf04",
+      "timestamp": "2026-10-25T12:05:27.759304Z"
+    },
+    {
+      "event_id": "01a172f3-925b-7c46-89a5-1df56d5d3b58",
+      "event_type": "ACKNOWLEDGED",
+      "message_hash": "c6c62e93ee021206ec982363f075ff74d8083787fa7459ec077b35895ec03104",
+      "metadata": {
+        "classifier": "button and text, rules v1",
+        "confidence": "button and note agree",
+        "intent": "direction"
+      },
+      "prev_hash": "d3e62304854efcb77a3c326e425ef8d32c8888a57e6a4e82507b26275e99b38c",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a172f0-9204-7044-9291-8538c24969a1",
+      "signature": "a03956219e9d9ac6585f8f98f205c3cfc631a59566e06129e4bd5ab5bfe3534452c27800a91f31e604d42c5d784adc0129c0819ae42e86f7602e91a6ac4a0b02",
+      "timestamp": "2026-10-25T12:05:27.771863Z"
+    },
+    {
+      "event_id": "01a172f3-9312-7096-8d80-e8d69d3350e2",
+      "event_type": "RESOLVED",
+      "message_hash": "c6c62e93ee021206ec982363f075ff74d8083787fa7459ec077b35895ec03104",
+      "metadata": {
+        "confidence": "button and note agree",
+        "intent": "direction",
+        "released": "true"
+      },
+      "prev_hash": "ebf8f8cf08386d0ce8028364607927c23a23a065c5bd068783c7a455c31afa78",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a172f0-9204-7044-9291-8538c24969a1",
+      "signature": "75cb22c06394fad6c09e6966784b607a3e01ae93dc3630583f6235c701fc2af77066063fc4c1a9f758e8e46621a74782da06a43679e7a93cea4940c42613cf0f",
+      "timestamp": "2026-10-25T12:05:27.954895Z"
+    }
+  ]
+}
