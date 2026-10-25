@@ -1,5 +1,6 @@
 // Package mock provides a recording Messenger for local development and tests.
-// It stands in for the three AWS CDS providers until those land in week three.
+// It stands in for a channel without touching AWS: the local CLI walks the
+// whole ladder against it, and tests use it to force a provider to fail.
 package mock
 
 import (

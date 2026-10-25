@@ -1,7 +1,9 @@
 # Reachee: MVP acceptance criteria
 
-Status: criteria of record. Carried live in `Reachee_MVP_Demo_Healthcare_v1_2.html`,
-where each one lights as the walkthrough proves it.
+Status: criteria of record. Carried on the demo page, `demo/index.html`, deployed at
+https://d1bskent938hm6.cloudfront.net/. The page lights a criterion only from receipts
+in the chain on screen, so it does not show all ten; the note at the end of this file
+says which, and why.
 
 Scope: one escalation, one recipient, one channel provisioned. Everything below is
 pass or fail. Nothing below is a roadmap item.

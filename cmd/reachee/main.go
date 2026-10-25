@@ -1,6 +1,7 @@
 // Command reachee runs one escalation end to end against mock providers and
 // prints the resulting audit chain. This is the local proof that the pipeline
-// holds together before the AWS CDS providers land.
+// holds together. It signs with a key generated for the run, so it says
+// nothing about the deployed stack or the published key.
 package main
 
 import (
@@ -47,7 +48,8 @@ func run() error {
 	if err := audit.Verify(events, pub); err != nil {
 		return err
 	}
-	fmt.Println("\nchain verified against the published public key")
+	fmt.Println("\nchain verified against the key generated for this run, not the published key")
+	fmt.Println("to verify a deployed chain against the published key, see the README's cold-verify command")
 
 	if os.Getenv("REACHEE_DUMP_CHAIN") != "" {
 		enc := json.NewEncoder(os.Stdout)

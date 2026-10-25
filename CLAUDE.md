@@ -152,20 +152,25 @@ These follow from the principles above and are not negotiable in a hurry.
 
 `MVP_CRITERIA.md` holds ten criteria. Each is pass or fail.
 
-## Known defects, in priority order
+## Known defects and gaps, in priority order
 
-1. A human denial is currently treated as a release. This contradicts
-   criterion 09 and is the one a judge could find. A denial must complete the
-   execution without releasing the held action.
-2. A deferred escalation is dropped and nothing re-queues it. Contradicts
-   criterion 03.
+These are the same four, in the same order, as the README's "Known gaps".
+
+1. A deferred escalation is dropped and nothing re-queues it. The `DEFERRED`
+   receipt is written, but the reach never happens, which contradicts the
+   intent of criterion 03.
+2. The dignity pipeline (coalescing, the attention budget, quiet hours) keeps
+   its state in memory per execution environment, so its decisions do not
+   hold across cold starts and nothing caps the total number of raises.
 3. Coalesced joiners never receive the resolution. Out of scope for the
    submission, documented as a known gap.
+4. No empathy model is configured. Every `SENT` receipt says so with
+   `empathy_source: fallback`.
 
-## Handler requirements not yet built
+## Handler requirements
 
-Binding on `cmd/raise`, `cmd/attempt`, and `cmd/reply` when they replace the
-not-implemented stubs.
+Binding on `cmd/raise`, `cmd/attempt`, and `cmd/reply`. All three meet them
+today; a change that breaks either is wrong.
 
 - The signing key is fetched from Secrets Manager once, at init, into a
   package-level variable, and never per invocation. Criterion 01 allows under

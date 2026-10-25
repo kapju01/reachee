@@ -186,7 +186,7 @@
   <div id="subbar">
     <span id="motto">Every Reachee is respected. Every promise is kept.</span>
     <span id="crumb">Human-in-the-Loop Escalation &middot; Remote Patient Monitoring</span>
-    <span class="pill demo" id="mvppill" style="border-color:var(--reach);color:var(--reach)">MVP CRITERIA &middot; 0 OF 10</span>
+    <span class="pill demo" id="mvppill" style="border-color:var(--reach);color:var(--reach)">CRITERIA &middot; 0 SHOWN &middot; 10 NOT SHOWN HERE</span>
     <span class="pill demo" id="sourcepill">LIVE STACK &middot; US-WEST-2</span>
     <span class="pill demo">NO MESSAGE BODY IN THE CHAIN</span>
   </div>
@@ -221,7 +221,7 @@
         <div id="dignityrows"></div>
       </div>
       <div class="sect">
-        <h3><span class="dot" style="background:var(--reach)"></span>MVP criteria <span style="color:var(--dim);font-weight:400" id="mvplbl">&middot; 0 of 10 shown</span></h3>
+        <h3><span class="dot" style="background:var(--reach)"></span>MVP criteria <span style="color:var(--dim);font-weight:400" id="mvplbl">&middot; 0 shown in this run</span></h3>
         <div id="mvprows"></div>
         <div class="note" style="padding:11px 0 0">Each criterion lights only from receipts in the chain on screen. 02, 03, and 07 have no receipt on an ordinary run, so this page does not show them. 10 is met here only when this browser has checked every signature as well as every link.</div>
       </div>
@@ -393,12 +393,13 @@ const SCENARIO = {
 };
 const PROVIDER_LABEL = {email: "Amazon SES v2"};
 const RUNS = {
-  "c09-direction": ["Direction releases", "criterion 09"],
+  "c09-direction": ["Direction releases (24 Oct run)", "criterion 09"],
+  "c09-live-ses-direction": ["Direction releases (25 Oct run)", "criterion 09"],
   "c09-denial":    ["Denial releases nothing", "criterion 09"],
   "c09-timeout":   ["Timeout releases nothing", "criterion 09"],
   "c05-breaker":   ["Open breaker skips a tier", "criterion 05"],
 };
-const RUN_ORDER = ["c09-direction", "c09-denial", "c09-timeout", "c05-breaker"];
+const RUN_ORDER = ["c09-direction", "c09-live-ses-direction", "c09-denial", "c09-timeout", "c05-breaker"];
 const TERMINAL = new Set(["RESOLVED", "DENIED", "TIMED_OUT"]);
 const VERDICTS = new Set(["COALESCED", "DEFERRED", "SUPPRESSED"]);
 
@@ -631,8 +632,18 @@ function renderCriteria(evs, ver, live){
     return `<div class="gaterow ${cls}${lit}${idle}"><span class="gn">${String(i + 1).padStart(2, "0")}</span><span class="gl">${esc(t)}${why ? '<span class="why">' + esc(why) + "</span>" : ""}</span><span class="gs">${esc(label)}</span></div>`;
   }).join("");
   const met = c.filter(x => x[0] === "pass").length;
-  $("mvplbl").innerHTML = "&middot; " + met + " of 10 shown";
-  $("mvppill").textContent = "MVP CRITERIA · " + met + " OF 10";
+  // Every one of the ten is accounted for, never as a fraction: "7 of 10" in
+  // a video frame reads as a score. The rail says what each count is. The
+  // subbar pill has room for two clauses, so it folds everything not shown
+  // into one, except a failure, which is never folded into anything.
+  const rest = {};
+  for (const [cls, label] of c) if (cls !== "pass") rest[label] = (rest[label] || 0) + 1;
+  const parts = [met + " shown in this run"];
+  if (rest["NOT SHOWN HERE"]) parts.push(rest["NOT SHOWN HERE"] + " not showable on this page");
+  for (const [label, n] of Object.entries(rest)) if (label !== "NOT SHOWN HERE") parts.push(n + " " + label.toLowerCase());
+  $("mvplbl").textContent = "· " + parts.join(", ");
+  const failed = c.filter(x => x[0] === "block").length, unshown = c.length - met - failed;
+  $("mvppill").textContent = "CRITERIA · " + met + " SHOWN" + (unshown ? " · " + unshown + " NOT SHOWN HERE" : "") + (failed ? " · " + failed + " FAILED" : "");
 }
 
 /* ---------- receipts and verification ---------- */
@@ -842,7 +853,7 @@ function setMode(mode){
   notice(""); clearView();
   $("rpagesub").textContent = mode === "live" ? "Raise a live escalation. Click any receipt to inspect it." : "Choose a past run. Click any receipt to inspect it.";
   if (mode === "live"){ $("stepline").innerHTML = liveIntro(); $("nextbtn").textContent = "Raise the escalation"; $("nextbtn").disabled = false; }
-  else $("stepline").innerHTML = '<span class="k">PAST RUNS</span>Four escalations run against the deployed stack and committed as evidence: a direction that releases, a denial and a timeout that release nothing, and an open breaker that skips a tier. Each verifies in this browser and downloads as the bundle verify/verify_chain.py reads.';
+  else $("stepline").innerHTML = '<span class="k">PAST RUNS</span>Five escalations run against the deployed stack and committed as evidence: two directions that release, a denial and a timeout that release nothing, and an open breaker that skips a tier. Each verifies in this browser and downloads as the bundle verify/verify_chain.py reads.';
 }
 (async function start(){
   try {

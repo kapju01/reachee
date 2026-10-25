@@ -36,8 +36,9 @@ type Result struct {
 	Reason string // why the fallback ran, empty on the model path
 }
 
-// Model is the humanizing backend. BedrockTranslator will implement it in
-// week five; the interface keeps the dispatcher independent of that timing.
+// Model is the humanizing backend. No model is configured in this build, so
+// the fallback always runs and says so; the interface keeps the dispatcher
+// independent of whichever backend is added.
 type Model interface {
 	Humanize(ctx context.Context, req Request) (string, error)
 }

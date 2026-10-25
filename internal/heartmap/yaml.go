@@ -6,9 +6,9 @@ import (
 )
 
 // A deliberately small YAML subset parser: nested mappings, sequences, and
-// scalar strings. Reachee carries zero third-party dependencies until the AWS
-// SDK lands in the provider packages, so the Heart-Map loader parses its own
-// input. Supported: "key: value", "key:" plus an indented block, "- " sequence
+// scalar strings. Reachee's only third-party dependencies are the AWS SDK and
+// the Lambda runtime, so the Heart-Map loader parses its own input rather
+// than adding a YAML library for one small file. Supported: "key: value", "key:" plus an indented block, "- " sequence
 // items, single or double quoted scalars, and "#" comments.
 
 type ymlLine struct {

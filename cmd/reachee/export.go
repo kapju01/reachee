@@ -93,6 +93,6 @@ func runExport(path string) error {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s: %d events, public key %x\n", path, len(events), pub)
+	fmt.Printf("wrote %s: %d events, signed with a key generated for this run, public key %x\n", path, len(events), pub)
 	return nil
 }

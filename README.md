@@ -1,41 +1,178 @@
 # Reachee
 
-Human-in-the-loop escalation fabric for regulated agentic AI.
-
-When an autonomous agent hits a decision it should not make alone, Reachee reaches the right human, on the right channel, in the right register, at the right time. Every attempt produces cryptographic evidence that survives audit.
+Human-in-the-loop escalation for agentic AI. An agent that reaches the edge of
+its own authority stops. Reachee reaches a person through a declared contact
+policy, and only that person's decision releases the held action.
 
 *Every Reachee is respected. Every promise is kept.*
 
 ## Status
 
-Week 2 skeleton. The pipeline runs end to end against mock providers. The three AWS CDS providers land in week 3.
+The stack is deployed and live in `us-west-2`. The demo page is
+**https://d1bskent938hm6.cloudfront.net/**.
+
+The central claim is that only a person's answer releases the held action, and
+that the record of it verifies without us. A judge can confirm it from a cold
+clone in under ten minutes: the page, then one stdlib Python command against a
+committed bundle and the published key.
+
+`MVP_CRITERIA.md` holds the ten pass-or-fail criteria. Criterion 09 (a
+direction releases, a denial and a timeout do not) is evidenced in
+`docs/criterion-09-evidence.md`, and criterion 05 (an open breaker skips a
+tier and says so) in `docs/criterion-05-evidence.md`.
 
 ## Quick start
 
-    make test
-    make run
+### 1. Open the live page
 
-`make run` dispatches one escalation with tier 1 forced down, walks the ladder, prints the audit chain, and verifies that chain against a freshly generated public key.
+https://d1bskent938hm6.cloudfront.net/
+
+- **Inspect a past run** loads a committed evidence bundle, checks every hash
+  link in the browser, checks every Ed25519 signature against the published
+  key where the browser's WebCrypto supports Ed25519, and lights each
+  criterion only from receipts in that chain. Each run downloads as the
+  bundle the verifier reads.
+- **Raise a live escalation** calls `POST /raise` on the deployed API. It
+  reaches the project's on-call clinician by real email. Unless that person
+  happens to answer, the honest outcome is a timeout after fifteen minutes,
+  with nothing released. Between 22:00 and 07:00 America/Chicago, quiet hours
+  defer a P1 raise, and no email is sent.
+
+### 2. Verify a bundle cold
+
+This needs only Python 3 and its standard library. `-I` keeps the
+interpreter from importing anything from the working directory.
+
+    PUB=https://d1bskent938hm6.cloudfront.net/keys/reachee-ed25519.pub
+    python3 -I verify/verify_chain.py docs/evidence/c09-denial-01a16b4b-259b.json --pubkey $PUB
+
+Expected output ends:
+
+    no field in this bundle is long enough to hold a message body
+
+    CHAIN VERIFIED: 6 events, every signature and every link
+
+With `--pubkey`, the key embedded in the bundle is ignored. A bundle checked
+against its own key proves only that it is internally consistent. The
+verifier shares no code with the Go side. `--selftest
+testdata/canonical_golden.txt` checks its serializer against the golden file
+that the Go encoder is also tested against.
+
+A live escalation verifies the same way, straight from the API:
+
+    curl -s "https://un5ibyx5a1.execute-api.us-west-2.amazonaws.com/escalation/<id>?format=bundle" \
+      | python3 -I verify/verify_chain.py /dev/stdin --pubkey $PUB
+
+### 3. Run the tests
+
+    make test
+
+Go 1.24. Run `make run` to walk one escalation locally against mock
+providers, with tier 1 forced down. It signs the chain with a key generated
+for that run and verifies against it. That proves the pipeline holds
+together; it is not evidence about the deployed stack.
+
+`./scripts/preflight.sh` additionally checks the AWS identity and the SES
+identities, so it needs AWS credentials. It then runs four more checks:
+
+- canonicalization parity across Go, Python, and the demo page;
+- a round trip signed in Go and verified in Python;
+- the tamper test;
+- the body-length check.
+
+Under Node, it also runs the demo page's own verifier over every committed
+bundle. Without Node, that check prints `SKIP`, and the summary line counts
+it.
+
+### 4. Deploy your own
+
+Terraform 1.6 or later, the AWS CLI, and an account you can create IAM roles
+in. The region is fixed at `us-west-2`.
+
+1. Verify a sender and a recipient address in SES v2 in `us-west-2`. A
+   sandbox account delivers only to verified addresses.
+2. Run `go run ./cmd/reachee keygen`. It prints an Ed25519 seed and public key
+   as hex and writes nothing to disk. Put the public half in
+   `demo/keys/reachee-ed25519.pub`.
+3. Run `cp infra/terraform.tfvars.example infra/terraform.tfvars`, fill in the
+   sender, recipient, and a bucket name, then `terraform -chdir=infra init`
+   and `make apply`.
+4. Put the seed into the secret Terraform created:
+   `aws secretsmanager put-secret-value --secret-id reachee/signing-key
+   --secret-string <seed>`. Terraform creates the container only, so the key
+   never passes through Terraform state.
+
+`terraform -chdir=infra output` gives the API endpoint, the demo URL, and the
+public key URL. Your page reads `config.json`, which Terraform writes beside
+it from your own API URL and Heart-Map, with no addresses.
+
+The committed evidence bundles were signed with this project's key. On your
+own deploy, the past runs therefore fail signature checks against your key.
+Verify them against the project's published key, as in step 2.
+
+## Evidence bundles
+
+Five bundles are committed in `docs/evidence/`. All five were raised against
+the deployed stack in `us-west-2` and delivered by Amazon SES v2: each carries
+a `SENT` receipt from `ses-v2` with the message id SES returned. All five
+verify against the published key with the command above.
+
+| Bundle | Raised (UTC) | Receipts | Shows |
+| --- | --- | --- | --- |
+| `c09-direction-01a16b5f-f8a7.json` | 2026-10-24 00:46 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `RESOLVED` | A direction releases (`released: true`) |
+| `c09-denial-01a16b4b-259b.json` | 2026-10-24 00:24 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `DENIED` | A denial releases nothing |
+| `c09-timeout-01a16a5a-10cc.json` | 2026-10-23 20:00 | `PROMISED` `FAILED` `SENT` `TIMED_OUT` | A timeout releases nothing |
+| `c05-breaker-01a16e4e-76fb.json` | 2026-10-24 14:26 | `PROMISED` `ESCALATED` `SENT` `TIMED_OUT` | An open breaker skips tier 1 and says why |
+| `c09-live-ses-direction-01a172f0-9204.json` | 2026-10-25 12:02 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `RESOLVED` | A second direction, fetched from `?format=bundle` |
+
+The three `c09-` runs from 23 and 24 October predate the change that put
+`correlation_hash` in receipts in place of `correlation_id`. Their receipts
+carry the caller's correlation id in plaintext, signed as recorded. They are
+left exactly as exported, because regenerating them would replace the
+evidence, not fix it. The 25 October run and the breaker run carry only the
+hash.
 
 ## What is here
 
-| Package | Responsibility |
+| Path | Responsibility |
 | --- | --- |
+| `cmd/raise` | Lambda behind `POST /raise`. Writes the `PROMISED` receipt, starts the execution, returns. Never touches a provider. |
+| `cmd/attempt` | Lambda the state machine invokes to walk exactly one tier: attention gates, breaker, provider, receipt. |
+| `cmd/reply` | Lambda for the person's answer. `GET /reply` renders the choice and changes nothing; `POST /reply` records and classifies the answer and hands it to the waiting execution. It also writes the terminal receipts for release, denial, timeout, and a failed stage. |
+| `cmd/status` | Lambda behind `GET /escalation/{id}`: one escalation's receipts, or with `?format=bundle` the bundle the verifier reads. |
+| `cmd/reachee` | Local CLI: a mock-provider run, the chain exporter, and `keygen`. |
+| `internal/audit` | Hash-chained, Ed25519-signed events, and the bundle format. Content hashes only, never content. |
+| `internal/signing` | Loads the signing key from Secrets Manager once, at init. |
+| `internal/replytoken` | Mints and checks the reply link: escalation, recipient, expiry, and nonce under an HMAC. |
+| `internal/ddb` | The escalations table: request record, reply slot, chain, and the persisted circuit breakers. `ddbtest` is an in-memory stand-in for tests. |
+| `internal/config` | Runtime configuration from the environment. |
 | `internal/heartmap` | Per-contact policy: ladder, channels, quiet hours, rate limits. Loads YAML with no third-party dependency. |
-| `internal/dignity` | Coalescing, rate limiting, and quiet hours. Runs before any provider is touched. |
+| `internal/dignity` | Coalescing, the attention budget, and quiet hours. Runs before any provider is touched. |
 | `internal/circuit` | Three-state breaker per provider. Skips a broken provider instead of retrying it into the ground. |
-| `internal/providers` | The `Messenger` contract plus a recording mock. WhatsApp, SES, and SMS implement this interface. |
-| `internal/empathy` | Humanizes the message. When it could not, the SENT receipt says so (`empathy_source`, `empathy_reason`); the recipient's message carries no marker. |
-| `internal/audit` | Hash-chained, Ed25519-signed events. Content hashes only, never content. |
-| `internal/dispatcher` | Walks the ladder in order and emits an event for every promise kept, broken, or skipped. |
+| `internal/dispatcher` | Walks the ladder in order and emits a receipt for every promise kept, broken, or skipped. |
+| `internal/empathy` | Wraps the agent's words for the recipient. When no model ran, the `SENT` receipt says so (`empathy_source`, `empathy_reason`). |
+| `internal/providers` | The `Messenger` contract. `ses` is the one provisioned channel; `mock` is for local runs and tests. |
+| `verify/` | The independent verifier. Python standard library only, no shared code. |
+| `infra/` | Terraform: one table, one secret container, four Lambdas, one Standard state machine, one HTTP API, and the demo bucket behind CloudFront. |
+| `demo/` | The single-file demo page and the published public key. |
+| `testdata/` | `canonical_golden.txt`, the contract between the Go encoder and the Python verifier. |
+| `scripts/` | `preflight.sh`. |
 
-## Design commitments
+## How a hold ends
 
-1. Message content never enters the audit log. Only its SHA-256 hash does, so the chain is safe to hand to a party who should not read the messages.
-2. The chain verifies offline against a published public key, with no operator cooperation required.
-3. A skipped tier, a suppressed escalation, and a deferred one each produce an audit event. Silence is never an outcome.
-4. Failover is tiered, not active-active. Reaching a human twice for one event costs their trust.
-5. The empathy layer marks its own degradation. Nothing claims a humanized message it did not produce.
+The escalation is a Step Functions Standard state machine. `Release` has
+exactly one way in, from `DecideAnswer`. `DecideAnswer` runs only after
+`AwaitAnswer` has been completed by a person's answer, and it sends only an
+explicit `direction` to `Release`. Everything else goes to `Denied`: a
+denial, or an answer that is malformed or unclassified. A timeout routes to
+`TimedOut`. An attention-gate verdict and an exhausted ladder end in their own
+states. None of these release anything, and each writes a receipt. `reply`
+also re-checks the stored decision before it writes `RESOLVED`, so a
+definition edited to route wrongly fails rather than releasing.
+
+`AwaitAnswer` waits on a task token. The reply link cannot carry that token,
+because the email goes out before the execution is holding. It carries a
+signed claim instead, and `reply` refuses out loud when no token is armed.
 
 ## Reading an escalation's chain
 
@@ -43,7 +180,7 @@ Anyone holding an escalation id can read its chain:
 
     curl "$API/escalation/<id>"                  # receipts, decision, released
     curl "$API/escalation/<id>?format=bundle" \
-      | python3 verify/verify_chain.py /dev/stdin --pubkey "$PUBKEY_URL"
+      | python3 -I verify/verify_chain.py /dev/stdin --pubkey "$PUB"
 
 The default response lists each receipt with its event type, hashes,
 timestamp, and provider. It also gives the decision, taken from the
@@ -57,21 +194,21 @@ the only thing a caller needs.
 
 - **Ids are hard to guess.** Escalation ids are UUIDv7: a millisecond
   timestamp followed by 74 random bits from `crypto/rand`. The timestamp
-  reveals when an escalation was raised. The random bits put enumeration out of
-  reach.
+  reveals when an escalation was raised. The random bits put enumeration out
+  of reach.
 - **The chain carries no message content.** It holds content hashes, never
   the payload, the subject, or the clinician's note. The verifier fails a
-  bundle in which any string field, metadata values included, runs past 200
-  characters. That detects something large enough to be a message body. It
+  bundle in which any string field runs past 200 characters, metadata values
+  included. That detects something large enough to be a message body. It
   cannot detect a short identifier, and nothing in the verifier can: a name or
   a record number is just another short string. That limitation is why the
   content rule is enforced where receipts are written, not where they are
-  read. Every value a receipt carries is a fixed string, a value from the
-  Heart-Map, a hash, or an id or error code an AWS service returned, with two
-  exceptions:
+  read. Every value a receipt carries is one of four things: a fixed string,
+  a value from the Heart-Map, a hash, or an id or error code an AWS service
+  returned. There are two exceptions:
   - `agent_id` is the calling agent's own string, written verbatim.
   - `empathy_reason` carries a model's error text when the model fails. No
-    model is configured yet, so today it always reads "no model configured".
+    model is configured, so today it always reads "no model configured".
 - **Correlation ids enter as hashes.** A receipt carries `correlation_hash`,
   the SHA-256 (lowercase hex) of the caller's `correlation_id` exactly as sent.
   The plaintext stays on the request record, where coalescing reads it. A
@@ -114,10 +251,6 @@ environment.
   outcome cannot be recorded, the receipt is written anyway with
   `breaker_recorded: false`.
 
-Known gap: the dignity pipeline (coalescing, the attention budget, quiet
-hours) still keeps its state in memory per execution environment. Its
-decisions hold across warm invocations of `attempt`, not across cold starts.
-
 ## Throttling and failed stages
 
 The account allows ten concurrent Lambda executions, shared by every
@@ -128,8 +261,8 @@ machine is written so that running out of them is never silent.
   burst 1). Every raise that gets through becomes a real email to a real
   person. This bounds the rate, not the volume: three a minute sustained is
   still a great deal of email. Nothing caps the total today, because the
-  attention budget is kept per execution environment, as stated above. The
-  real cap arrives when that budget is kept in the table.
+  attention budget is kept per execution environment (see known gaps below).
+  The real cap arrives when that budget is kept in the table.
 - **`GET /escalation/{id}` is limited to about one a second** (burst 2), so
   polling and refreshing cannot take the slots a clinician's `POST /reply`
   needs. API Gateway enforces these limits approximately. Under test it let
@@ -151,10 +284,59 @@ machine is written so that running out of them is never silent.
   receipt saying why, and the only record is the Step Functions execution
   history.
 
-## Not yet built
+## Deliberate scope
 
-- AWS CDS providers: `socialmessaging`, `sesv2`, `pinpoint-sms-voice-v2` (week 3)
-- Bedrock AgentCore orchestrator and the Bedrock-backed empathy model (week 5)
-- DynamoDB-backed stores and the S3 Object Lock archive (week 4)
-- Inbound response ingestion and classification (week 5)
-- Terraform under `infra/` (weeks 3 to 5)
+This is an MVP built for judging. Its boundary is a decision, not a backlog:
+
+- one escalation type;
+- one verified recipient;
+- one provisioned channel, Amazon SES v2. Tier 1 (WhatsApp) and tier 3 (SMS)
+  are declared in the Heart-Map with no provider behind them. Tier 1 fails on
+  every run because it is not provisioned, which is how the failover and the
+  breaker are exercised.
+
+It does not have, and is not meant to have:
+
+- multi-tenancy;
+- a service level or delivery commitment;
+- high availability;
+- key rotation;
+- SSO, or any login on the reply page;
+- VPC isolation;
+- a WAF;
+- observability beyond CloudWatch defaults;
+- a second provisioned channel.
+
+## MVP exceptions, disclosed
+
+- **The build user holds `AdministratorAccess`.** Terraform runs as an IAM
+  user with that managed policy. The deployed functions do not: each Lambda
+  has its own execution role, scoped to the table, secret, and actions it
+  needs.
+- **SES is in the sandbox.** Production access is not enabled, so SES
+  delivers only to verified addresses. That is why this build reaches exactly
+  one recipient.
+- **The reply link proves possession, not identity.** A valid link
+  authorizes one decision on one escalation, once, until it expires. Whoever
+  holds it can make that decision. Nothing on the reply path checks who they
+  are.
+- **API access logging is off on purpose.** The reply token rides in the
+  query string of `GET /reply`, so an access log would store a live bearer
+  credential. The cost is that a refused request leaves no record. The
+  criterion 09 evidence calls out the one place this matters.
+
+## Known gaps
+
+- **A deferred escalation is not re-queued.** When quiet hours defer a reach,
+  the `DEFERRED` receipt is written and the execution ends. Nothing raises it
+  again when the window closes. This contradicts criterion 03's intent and is
+  the open defect.
+- **Attention-gate state is per execution environment.** Coalescing, the
+  attention budget, and quiet hours keep their state in memory in `attempt`.
+  Their decisions hold across warm invocations, not across cold starts. This
+  is also why nothing caps the total number of raises.
+- **Coalesced joiners never receive the resolution.** An escalation coalesced
+  into another ends with its `COALESCED` receipt and is not told how the
+  first one ended.
+- **No empathy model is configured.** The recipient gets the agent's own
+  words, and every `SENT` receipt says so with `empathy_source: fallback`.
