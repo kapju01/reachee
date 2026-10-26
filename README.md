@@ -9,7 +9,8 @@ policy, and only that person's decision releases the held action.
 ## Status
 
 The stack is deployed and live in `us-west-2`. The demo page is
-**https://d1bskent938hm6.cloudfront.net/**.
+**https://d1bskent938hm6.cloudfront.net/**. The build has used $0.03 of AWS
+usage before credits; [`docs/cost.md`](docs/cost.md) has the breakdown.
 
 The central claim is that only a person's answer releases the held action, and
 that the record of it verifies without us. A judge can confirm it from a cold
