@@ -176,7 +176,7 @@
       </button>
       <div id="appsmenu">
         <h5>HOW AGENTS CALL REACHEE</h5>
-        <p>One HTTPS call. The agent gets a receipt back at once and holds no connection.</p>
+        <p>One HTTPS call. The agent gets a receipt back without waiting for a person, and holds no connection open while one decides.</p>
         <pre id="contract"></pre>
         <p>The subject and payload go to the request record and never enter the chain. The correlation id enters only as its SHA-256.</p>
       </div>
@@ -511,7 +511,7 @@ function stages(){
   const src = VIEW && VIEW.bundle.events.find(e => e.event_type === "PROMISED");
   const agent = (src && src.metadata && src.metadata.agent_id) || SCENARIO.agent_id;
   return [
-    {k: "src", y: 28,  t: agent, s: "raised over POST /raise · receipt returned at once", tag: "ESCALATION"},
+    {k: "src", y: 28,  t: agent, s: "raised over POST /raise · receipt returned, nothing held open", tag: "ESCALATION"},
     {k: "dig", y: 122, t: "Attention gates", s: "coalesce · attention budget · quiet hours", tag: "POLICY"},
     ...[1, 2, 3].map((t, i) => ({k: "t" + t, y: 216 + i * 94, t: "Tier " + t + " · " + rung(t).channel,
       s: (PROVIDER_LABEL[rung(t).channel] || "not provisioned in this deployment") + " · " + rung(t).timeout_seconds + "s", tag: "PROMISE"})),

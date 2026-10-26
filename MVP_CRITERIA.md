@@ -12,10 +12,14 @@ pass or fail. Nothing below is a roadmap item.
 
 ## 01. Handoff returns a receipt, not a wait
 
-A calling agent raises an escalation in one call and gets a correlation receipt back
-in milliseconds, rather than holding the connection open while a person decides. The
-decision is not pushed back: there is no callback, so the caller reads it later with
-`GET /escalation/{id}`, polling until the escalation closes.
+A calling agent raises an escalation in one call and gets a correlation receipt back as
+soon as the escalation is recorded and its execution started, rather than holding the
+connection open while a person decides. The decision is not pushed back: there is no
+callback, so the caller reads it later with `GET /escalation/{id}`, polling until the
+escalation closes.
+
+This criterion is about behavior, not speed. One raise against the deployed stack,
+including a cold start, measured 1575 ms. That is a single sample, not a latency figure.
 
 ## 02. Contact policy is resolved before any provider is touched
 

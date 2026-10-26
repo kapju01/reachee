@@ -44,7 +44,7 @@
   <text class="mono c" x="440" y="190">POST /raise</text>
   <path class="garr" d="M560 262 H324"/>
   <text class="gov c" x="440" y="300">202 + receipt</text>
-  <text class="gov c" x="440" y="334">in milliseconds</text>
+  <text class="gov c" x="440" y="334">before anyone decides</text>
 
   <rect class="box" x="560" y="160" width="260" height="140" rx="14"/>
   <text class="h mono c" x="690" y="212">raise</text>

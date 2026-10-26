@@ -6,7 +6,7 @@ policy, and only that person's decision releases the held action.
 
 *Every Reachee is respected. Every promise is kept.*
 
-![The agent raises and gets a receipt back at once. Step Functions holds the action, runs the attention gates, walks the ladder (tier 1 WhatsApp not provisioned, tier 2 SES email sent, tier 3 SMS not reached), and waits on a task token. The clinician answers through a one-use reply link. Only a direction releases. Every step writes a signed, hash-linked receipt.](docs/architecture.png)
+![The agent raises and gets a receipt back without waiting for anyone to decide. Step Functions holds the action, runs the attention gates, walks the ladder (tier 1 WhatsApp not provisioned, tier 2 SES email sent, tier 3 SMS not reached), and waits on a task token. The clinician answers through a one-use reply link. Only a direction releases. Every step writes a signed, hash-linked receipt.](docs/architecture.png)
 
 The source is [`docs/architecture.svg`](docs/architecture.svg), drawn in the
 demo page's palette.
