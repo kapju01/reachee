@@ -338,7 +338,7 @@ end
 # -- 08 --------------------------------------------------------------------
 begin "08" "The answer returns to the caller, classified by intent"
 
-python3 -I - <<'PY' && ok "every answered run has RECEIVED then ACKNOWLEDGED with an intent, a classifier, and a confidence" || bad "an answered run lacks its classification"
+python3 -I - <<'PY' && ok "every answered run has RECEIVED then ACKNOWLEDGED with an intent, a classifier, and a confidence naming what was checked" || bad "an answered run lacks its classification, or its confidence claims a check the code does not make"
 import glob, json, sys
 for path in sorted(glob.glob("docs/evidence/*.json")):
     events = json.load(open(path))["events"]
@@ -349,7 +349,8 @@ for path in sorted(glob.glob("docs/evidence/*.json")):
     ack = events[i + 1] if i + 1 < len(events) else {}
     m = ack.get("metadata", {})
     if ack.get("event_type") != "ACKNOWLEDGED" or m.get("intent") not in ("direction", "denial") \
-            or not m.get("classifier") or not m.get("confidence"):
+            or not m.get("classifier") \
+            or m.get("confidence") not in ("button", "button; note contains no contradicting term"):
         sys.exit(path)
 PY
 

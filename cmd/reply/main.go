@@ -424,6 +424,15 @@ var (
 	approvalWords = []string{"approve", "approved", "go ahead", "proceed"}
 )
 
+// The confidence a receipt records names what was checked, not a judgment.
+// classify compares a note only against the word lists above, so it can say
+// the note holds none of the opposite button's words. It cannot say the note
+// agrees with the button, and the receipt must not claim it.
+const (
+	confidenceButton     = "button"
+	confidenceButtonNote = "button; note contains no contradicting term"
+)
+
 // classify reads intent from the button, with the note as a check on it. The
 // button is the decision; a note that contradicts it means the answer cannot
 // be read with confidence, and that is handed back rather than guessed.
@@ -447,9 +456,9 @@ func classify(button, text string) (intent, confidence string, err error) {
 		return "", "", errors.New("Your note reads like an approval, but you pressed Deny.")
 	}
 	if text == "" {
-		return button, "button", nil
+		return button, confidenceButton, nil
 	}
-	return button, "button and note agree", nil
+	return button, confidenceButtonNote, nil
 }
 
 func formOf(ev events.APIGatewayV2HTTPRequest) (url.Values, error) {

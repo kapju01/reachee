@@ -213,8 +213,8 @@ func TestPostDirectionReleases(t *testing.T) {
 		t.Fatalf("chain = %s", got)
 	}
 	ack := f.chain(t)[1]
-	if ack.Metadata["intent"] != "direction" || ack.Metadata["confidence"] == "" {
-		t.Fatalf("ACKNOWLEDGED must carry intent and confidence, got %v", ack.Metadata)
+	if ack.Metadata["intent"] != "direction" || ack.Metadata["confidence"] != "button; note contains no contradicting term" {
+		t.Fatalf("ACKNOWLEDGED must carry the intent and what was checked, got %v", ack.Metadata)
 	}
 
 	if len(f.sfn.calls) != 1 || aws.ToString(f.sfn.calls[0].TaskToken) != "sfn-task-token" {
@@ -278,6 +278,9 @@ func TestPostDenialReleasesNothing(t *testing.T) {
 	events := f.chain(t)
 	if got := types(events); got != "RECEIVED,ACKNOWLEDGED,DENIED" {
 		t.Fatalf("chain = %s", got)
+	}
+	if c := events[1].Metadata["confidence"]; c != "button" {
+		t.Fatalf("an answer with no note was checked against the button alone, got confidence %q", c)
 	}
 	if events[2].Metadata["released"] != "false" {
 		t.Fatal("DENIED must say nothing was released")
