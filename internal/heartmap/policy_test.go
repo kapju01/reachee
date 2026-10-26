@@ -75,6 +75,42 @@ func TestLoadParsesTheFullPolicy(t *testing.T) {
 	}
 }
 
+// The sample declares the same budget the loader falls back to, so it passes
+// whether rate_limit is read or ignored. These values match no default, and
+// every one must come from the document.
+func TestDeclaredRateLimitIsTheOneUsed(t *testing.T) {
+	src := strings.NewReplacer(
+		"max_per_hour: 6", "max_per_hour: 11",
+		"burst: 3", "burst: 5",
+		"coalesce_window_seconds: 90", "coalesce_window_seconds: 240",
+	).Replace(sample)
+	p, err := Load(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RateLimit{MaxPerHour: 11, Burst: 5, CoalesceWindow: 240 * time.Second}
+	if p.RateLimit != want {
+		t.Fatalf("rate limit = %+v, want the declared %+v", p.RateLimit, want)
+	}
+}
+
+// What a Heart-Map leaves out is filled by the defaults MVP_CRITERIA.md 02
+// states, and only by those.
+func TestOmittedValuesTakeTheStatedDefaults(t *testing.T) {
+	src := "contact:\n  id: someone\n  channels:\n    email:\n      address: a@b.invalid\n" +
+		"  failover_ladder:\n    - tier: 1\n      channel: email\n"
+	p, err := Load(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (RateLimit{MaxPerHour: 6, Burst: 3, CoalesceWindow: 90 * time.Second}); p.RateLimit != want {
+		t.Fatalf("rate limit = %+v, want the stated default %+v", p.RateLimit, want)
+	}
+	if p.Ladder[0].Timeout != 300*time.Second {
+		t.Fatalf("tier timeout = %v, want the stated default 300s", p.Ladder[0].Timeout)
+	}
+}
+
 func TestLadderMustReferenceDeclaredChannels(t *testing.T) {
 	bad := strings.Replace(sample, "      channel: email", "      channel: pigeon", 1)
 	if _, err := Load(bad); err == nil {

@@ -125,22 +125,47 @@ end
 # -- 02 --------------------------------------------------------------------
 begin "02" "Contact policy is resolved before any provider is touched"
 
-# Who, which channels, what order, and quiet hours are each read from a
-# declared Heart-Map in an existing test. The attention budget is not:
-# heartmap.Load falls back to 6 an hour, burst 3, and a 90 s window when
-# rate_limit is absent, and the only loader test declares exactly those
-# values, so it passes whether the budget is read or defaulted.
-na "no test loads a rate_limit that differs from the loader's built-in default, so nothing shows the attention budget comes from declared policy rather than a code path"
+# Each test loads a Heart-Map document with values no default supplies:
+# tier timeouts of 900 s and 60 s, a Chicago quiet window, and a budget of
+# 11 an hour, burst 5, 240 s. The stated defaults are asserted separately.
+if [ "$have_go" -eq 1 ]; then
+  gotests ./internal/heartmap TestLoadParsesTheFullPolicy TestQuietHoursRespectTheContactTimezone TestDeclaredRateLimitIsTheOneUsed TestOmittedValuesTakeTheStatedDefaults \
+    && ok "who, which channels, what order, each tier's timeout, quiet hours, and the attention budget are read from the declared Heart-Map; an omitted value takes the stated default" \
+    || bad "internal/heartmap loader tests"
+  gotests ./internal/dignity TestDeclaredBurstIsTheBudgetSpent \
+    && ok "the gate spends the budget the document declares: a declared burst of 5 delivers five and suppresses the sixth" \
+    || bad "internal/dignity budget test"
+else
+  na "internal/heartmap and internal/dignity tests: $NO_GO"
+fi
+
+if [ "$have_modules" -eq 1 ]; then
+  gotests ./cmd/attempt TestTierOneBreaksThenTierTwoSends TestQuietHoursDeferBeforeAnyProvider \
+    && ok "attempt resolves the tier's channel, address and timeout from the Heart-Map, and the gate decides before any provider" \
+    || bad "cmd/attempt policy tests"
+else
+  na "cmd/attempt policy tests: $([ "$have_go" -eq 1 ] && echo "$NO_MODULES" || echo "$NO_GO")"
+fi
 end
 
 # -- 03 --------------------------------------------------------------------
 begin "03" "Attention guardrails run first, and each decision writes a receipt"
 
-# Quiet hours and suppression are tested to write their receipt before any
-# provider. Coalescing is tested only for its verdict: no test shows a
-# coalesced reach writing COALESCED or leaving the provider untouched, and
-# no committed bundle contains a gate decision.
-na "no test shows a coalesced reach writing COALESCED and touching no provider; only quiet hours and suppression are tested end to end"
+if [ "$have_go" -eq 1 ]; then
+  gotests ./internal/dispatcher TestSuppressedEscalationStillProducesAnAuditEvent TestQuietHoursDeferralIsAudited \
+    && ok "a reach past the attention budget writes SUPPRESSED with its reason and is not delivered; one inside quiet hours writes DEFERRED" \
+    || bad "internal/dispatcher gate receipt tests"
+else
+  na "internal/dispatcher gate receipt tests: $NO_GO"
+fi
+
+if [ "$have_modules" -eq 1 ]; then
+  gotests ./cmd/attempt TestQuietHoursDeferBeforeAnyProvider TestCoalescedReachWritesItsReceiptAndTouchesNoProvider \
+    && ok "a deferred reach and a coalesced reach each write one receipt, touch no provider, and walk no further tier" \
+    || bad "cmd/attempt gate tests"
+else
+  na "cmd/attempt gate tests: $([ "$have_go" -eq 1 ] && echo "$NO_MODULES" || echo "$NO_GO")"
+fi
 end
 
 # -- 04 --------------------------------------------------------------------
@@ -339,8 +364,8 @@ if [ "$have_modules" -eq 1 ]; then
   gotests ./cmd/reply TestPostDirectionReleases TestContradictoryAnswerIsHandedBack \
     && ok "the decision handed to the execution is the classified intent; a note that contradicts the button is handed back, not taken as the button" \
     || bad "cmd/reply classification tests"
-  gotests ./cmd/status TestDirectionReportsReleased TestDenialIsNotReleased \
-    && ok "GET /escalation/{id} returns the decision and whether anything was released" \
+  gotests ./cmd/status TestDirectionReportsReleased TestDenialIsNotReleased TestResponseFieldNamesArePinned \
+    && ok "GET /escalation/{id} returns the decision and whether anything was released, under the field names a caller reads" \
     || bad "cmd/status decision tests"
 else
   na "reply and status tests: $([ "$have_go" -eq 1 ] && echo "$NO_MODULES" || echo "$NO_GO")"

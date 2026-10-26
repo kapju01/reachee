@@ -148,6 +148,44 @@ func TestDirectionReportsReleased(t *testing.T) {
 	}
 }
 
+// The response's field names are the contract a caller reads, so they are
+// pinned here by name. decode cannot do it: it reads the body back through the
+// same struct that wrote it, and a renamed tag passes on both sides.
+func TestResponseFieldNamesArePinned(t *testing.T) {
+	f := newFixture(t)
+	f.answered(t, "direction", audit.TypeResolved, "true")
+	var got map[string]any
+	if err := json.Unmarshal([]byte(f.get(t, id, nil).Body), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"escalation_id": "` + id + `", "decision": "direction", "outcome": "RESOLVED", "released": true}`
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(want), &fields); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range fields {
+		if got[k] != v {
+			t.Errorf("%s = %v, want %v", k, got[k], v)
+		}
+	}
+	if head, _ := got["chain_head"].(string); head == "" {
+		t.Errorf("chain_head = %v, want the last receipt's hash", got["chain_head"])
+	}
+	receipts, _ := got["receipts"].([]any)
+	if len(receipts) != 5 {
+		t.Fatalf("receipts = %v, want five", got["receipts"])
+	}
+	first, _ := receipts[0].(map[string]any)
+	for _, k := range []string{"event_id", "event_type", "timestamp", "provider_name", "message_hash", "prev_hash", "hash"} {
+		if _, ok := first[k]; !ok {
+			t.Errorf("a receipt has no %q field", k)
+		}
+	}
+	if len(got) != 6 || len(first) != 7 {
+		t.Errorf("unexpected fields: %d at the top, %d in a receipt", len(got), len(first))
+	}
+}
+
 // A denial completes the chain without a release. The summary must not read
 // a terminal receipt as a release just because one exists.
 func TestDenialIsNotReleased(t *testing.T) {

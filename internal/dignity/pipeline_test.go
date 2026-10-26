@@ -153,3 +153,25 @@ func TestQuietHoursWithoutBypassDefersEvenP0(t *testing.T) {
 		t.Fatalf("with no declared bypass, even P0 defers, got %s", d.Verdict)
 	}
 }
+
+// The budget the gate spends is the one the Heart-Map declares. testPolicy
+// matches the loader's defaults, so this one is loaded from a document that
+// declares a burst no default supplies.
+func TestDeclaredBurstIsTheBudgetSpent(t *testing.T) {
+	policy, err := heartmap.Load("contact:\n  id: someone\n  channels:\n    email:\n      address: a@b.invalid\n" +
+		"  failover_ladder:\n    - tier: 1\n      channel: email\n" +
+		"  rate_limit:\n    max_per_hour: 11\n    burst: 5\n    coalesce_window_seconds: 240\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := daytime()
+	p := New(func() time.Time { return now })
+	for i := 0; i < 5; i++ {
+		if d := p.Evaluate(Escalation{RequestID: "r", RecipientID: policy.ID, Priority: providers.P2}, policy); d.Verdict != Deliver {
+			t.Fatalf("reach %d of a declared burst of 5 = %s, want delivered", i+1, d.Verdict)
+		}
+	}
+	if d := p.Evaluate(Escalation{RequestID: "r6", RecipientID: policy.ID, Priority: providers.P2}, policy); d.Verdict != Suppressed {
+		t.Fatalf("reach 6 = %s, want suppressed past the declared burst", d.Verdict)
+	}
+}

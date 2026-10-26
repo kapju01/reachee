@@ -170,6 +170,42 @@ func TestLaterTierIsNotCoalescedIntoItself(t *testing.T) {
 	}
 }
 
+// A second escalation for the same event, inside the window the first one
+// opened, is a second page and the gate's job is to refuse it. It writes one
+// COALESCED receipt naming the first, sends nothing, and walks no further.
+func TestCoalescedReachWritesItsReceiptAndTouchesNoProvider(t *testing.T) {
+	f := newFixture(t, afternoon())
+	f.raise(t, "esc-1", "bed-4")
+	f.walk(t, "esc-1", 1)
+	if out := f.walk(t, "esc-1", 2); out.Status != "SENT" {
+		t.Fatalf("the first escalation = %s, want SENT", out.Status)
+	}
+	breaker := f.a.breakers.For("unprovisioned:whatsapp").State()
+
+	*f.now = f.now.Add(30 * time.Second)
+	f.raise(t, "esc-2", "bed-4")
+	out := f.walk(t, "esc-2", 1)
+	if out.Status != string(dignity.Coalesced) || out.NextTier != nil {
+		t.Fatalf("got %+v, want COALESCED with no next tier", out)
+	}
+	events := f.chain(t, "esc-2")
+	if len(events) != 1 || events[0].EventType != audit.TypeCoalesced {
+		t.Fatalf("want one COALESCED receipt, got %d", len(events))
+	}
+	if events[0].Metadata["coalesced_to"] != "esc-1" {
+		t.Fatalf("the receipt must name the escalation it joined, got %q", events[0].Metadata["coalesced_to"])
+	}
+	if err := audit.Verify(events, f.pub); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.email.Sent()) != 1 {
+		t.Fatalf("a coalesced reach must not touch a provider, email sent %d", len(f.email.Sent()))
+	}
+	if got := f.a.breakers.For("unprovisioned:whatsapp").State(); got != breaker {
+		t.Fatalf("a coalesced reach must not attempt tier 1 either; its breaker went %s to %s", breaker, got)
+	}
+}
+
 // The gate decides before any provider is touched, and its decision is a
 // receipt, not silence.
 func TestQuietHoursDeferBeforeAnyProvider(t *testing.T) {
