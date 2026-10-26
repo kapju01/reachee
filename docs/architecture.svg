@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <!-- Reachee architecture. The colors are demo/index.html's own tokens, so
+       the diagram and the page read as one system. Render to
+       docs/architecture.png at 1920x1080; no label is below 28px. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#05262B"/>
+      <stop offset="1" stop-color="#0A454E"/>
+    </linearGradient>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9FC4C9"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#3FD0B2"/>
+    </marker>
+    <style>
+      text { font-family: "Open Sans", -apple-system, system-ui, "Segoe UI", sans-serif; fill: #F2F8F8; font-size: 28px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .h { font-size: 34px; font-weight: 700; }
+      .t { font-size: 30px; font-weight: 700; }
+      .mut { fill: #9FC4C9; }
+      .gov { fill: #3FD0B2; }
+      .brk { fill: #FF6A55; }
+      .box { fill: rgba(8,48,54,.78); stroke: rgba(255,255,255,.18); stroke-width: 2; }
+      .box2 { fill: rgba(6,38,43,.92); stroke: rgba(255,255,255,.18); stroke-width: 2; }
+      .arr { stroke: #9FC4C9; stroke-width: 3; fill: none; marker-end: url(#a); }
+      .garr { stroke: #3FD0B2; stroke-width: 3; fill: none; marker-end: url(#g); }
+      .c { text-anchor: middle; }
+      .e { text-anchor: end; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+
+  <text x="60" y="88"><tspan class="h" font-size="44">Reachee</tspan><tspan class="mut" font-size="34" dx="16">only a person's answer releases the held action</tspan></text>
+
+  <!-- the call, and the receipt that comes straight back -->
+  <rect class="box" x="60" y="160" width="260" height="140" rx="14"/>
+  <text class="h c" x="190" y="210">Agent</text>
+  <text class="mut c" x="190" y="250">at the edge of</text>
+  <text class="mut c" x="190" y="284">its authority</text>
+
+  <path class="arr" d="M320 205 H556"/>
+  <text class="mono c" x="440" y="190">POST /raise</text>
+  <path class="garr" d="M560 262 H324"/>
+  <text class="gov c" x="440" y="300">202 + receipt</text>
+  <text class="gov c" x="440" y="334">in milliseconds</text>
+
+  <rect class="box" x="560" y="160" width="260" height="140" rx="14"/>
+  <text class="h mono c" x="690" y="212">raise</text>
+  <text class="mut c" x="690" y="252">writes PROMISED,</text>
+  <text class="mut c" x="690" y="286">starts the hold</text>
+  <path class="arr" d="M820 230 H896"/>
+
+  <!-- the state machine: gates first, then the ladder, then the hold -->
+  <rect x="900" y="130" width="960" height="680" rx="18" fill="rgba(63,208,178,.05)" stroke="#3FD0B2" stroke-width="2" stroke-dasharray="10 8"/>
+  <text class="t gov" x="930" y="180">Step Functions: the action waits here</text>
+
+  <rect class="box2" x="930" y="200" width="900" height="112" rx="12"/>
+  <text class="t" x="960" y="246">First, attention gates, before any provider</text>
+  <text class="mut" x="960" y="290">coalescing  ·  attention budget  ·  quiet hours</text>
+
+  <text class="t" x="930" y="368">Then the ladder, one tier at a time</text>
+  <rect x="930" y="388" width="900" height="56" rx="10" fill="rgba(255,106,85,.14)" stroke="#FF6A55" stroke-width="2"/>
+  <text x="955" y="426">1   WhatsApp</text>
+  <text class="brk e" x="1805" y="426">not provisioned · FAILED</text>
+  <rect x="930" y="458" width="900" height="56" rx="10" fill="rgba(63,208,178,.13)" stroke="#3FD0B2" stroke-width="2"/>
+  <text x="955" y="496">2   Email · Amazon SES v2</text>
+  <text class="gov e" x="1805" y="496" font-weight="700">SENT</text>
+  <rect x="930" y="528" width="900" height="56" rx="10" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+  <text class="mut" x="955" y="566">3   SMS</text>
+  <text class="mut e" x="1805" y="566">not reached</text>
+
+  <rect class="box2" x="930" y="608" width="900" height="176" rx="12" stroke="#F5A623"/>
+  <text class="t" x="960" y="654">Then hold on a task token, up to tier 2's 900 s</text>
+  <rect x="960" y="680" width="176" height="48" rx="24" fill="#3FD0B2"/>
+  <text class="mono c" x="1048" y="714" font-weight="700" fill="#05262B" style="fill:#05262B">Release</text>
+  <rect x="1156" y="680" width="160" height="48" rx="24" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+  <text class="mono c mut" x="1236" y="714">Denied</text>
+  <rect x="1336" y="680" width="196" height="48" rx="24" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+  <text class="mono c mut" x="1434" y="714">TimedOut</text>
+  <text class="mut" x="960" y="766">a direction releases; nothing else does</text>
+
+  <!-- the person, and the only way back in -->
+  <path class="arr" d="M930 486 H824"/>
+  <rect class="box" x="560" y="400" width="260" height="150" rx="14"/>
+  <text class="h c" x="690" y="450">Clinician</text>
+  <text class="mut c" x="690" y="490">decides from</text>
+  <text class="mut c" x="690" y="524">the email alone</text>
+  <path class="arr" d="M690 550 V616"/>
+  <rect class="box" x="560" y="620" width="260" height="140" rx="14"/>
+  <text class="h mono c" x="690" y="668">reply</text>
+  <text class="mut c" x="690" y="708">one-use signed</text>
+  <text class="mut c" x="690" y="742">link, no login</text>
+  <path class="garr" d="M820 690 H926"/>
+
+  <!-- the caller reads the decision back from the chain -->
+  <path class="arr" d="M110 856 V304" stroke-dasharray="8 8"/>
+  <text x="135" y="470">the caller polls</text>
+  <text class="mono" x="135" y="510">GET /escalation/{id}</text>
+  <text x="135" y="550">for the decision</text>
+
+  <path class="arr" d="M1380 810 V856"/>
+  <text class="mut" x="1400" y="842">every step writes a receipt</text>
+
+  <!-- the chain -->
+  <rect class="box" x="60" y="860" width="1800" height="176" rx="14"/>
+  <text class="t" x="90" y="906">Audit chain</text>
+  <g class="mono">
+    <rect x="90" y="926" width="170" height="50" rx="10" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+    <text class="mono c" x="175" y="961">PROMISED</text>
+    <path class="arr" d="M264 951 H300"/>
+    <rect x="304" y="926" width="137" height="50" rx="10" fill="none" stroke="#FF6A55" stroke-width="2"/>
+    <text class="mono c brk" x="372" y="961">FAILED</text>
+    <path class="arr" d="M445 951 H481"/>
+    <rect x="485" y="926" width="103" height="50" rx="10" fill="none" stroke="#3FD0B2" stroke-width="2"/>
+    <text class="mono c gov" x="536" y="961">SENT</text>
+    <path class="arr" d="M592 951 H628"/>
+    <rect x="632" y="926" width="170" height="50" rx="10" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+    <text class="mono c" x="717" y="961">RECEIVED</text>
+    <path class="arr" d="M806 951 H842"/>
+    <rect x="846" y="926" width="238" height="50" rx="10" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+    <text class="mono c" x="965" y="961">ACKNOWLEDGED</text>
+    <path class="arr" d="M1088 951 H1124"/>
+    <rect x="1128" y="926" width="170" height="50" rx="10" fill="#3FD0B2"/>
+    <text class="mono c" x="1213" y="961" font-weight="700" style="fill:#05262B">RESOLVED</text>
+  </g>
+  <text class="mut" x="1340" y="961">no message bodies, hashes only</text>
+  <text class="mut" x="90" y="1012">Each receipt is signed and hash-linked. verify/verify_chain.py checks it cold against the published key.</text>
+</svg>
