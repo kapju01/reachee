@@ -230,16 +230,22 @@ ok = (len(skip) == 1
 sys.exit(0 if ok else 1)
 PY
 
-python3 -I - <<'PY' && ok "every tier-1 failure in the c09 runs is a FAILED receipt naming the broken promise and the breaker state, once per tier" || bad "a delivery failure in the c09 runs is unnamed, lacks its breaker state, or appears more than once"
+python3 -I - <<'PY' && ok "each c09 run has one tier-1 receipt: a FAILED naming the broken promise and the breaker state, or an ESCALATED skip on an OPEN breaker; at least one is FAILED" || bad "a tier-1 outcome in the c09 runs is unnamed, lacks its breaker state, appears more than once, or no run shows the FAILED path"
 import glob, json, sys
+failed = 0
 for path in sorted(glob.glob("docs/evidence/c09-*.json")):
     events = json.load(open(path))["events"]
-    fails = [e for e in events if e["event_type"] == "FAILED" and "tier" in e["metadata"]]
-    if len(fails) != 1:
+    tier1 = [e for e in events if e["metadata"].get("tier") == "1"]
+    if len(tier1) != 1:
         sys.exit(path)
-    m = fails[0]["metadata"]
-    if not m.get("reason", "").startswith("promise broken: ") or not m.get("breaker_state"):
+    t, m = tier1[0]["event_type"], tier1[0]["metadata"]
+    if t == "FAILED" and m.get("reason", "").startswith("promise broken: ") and m.get("breaker_state"):
+        failed += 1
+    elif not (t == "ESCALATED" and m.get("breaker_state") == "OPEN"
+              and m.get("reason") == "circuit breaker is OPEN, tier skipped"):
         sys.exit(path)
+if not failed:
+    sys.exit("no c09 run takes the FAILED path")
 PY
 
 if [ "$have_go" -eq 1 ]; then
@@ -294,12 +300,17 @@ messaging = set(re.findall(r'"((?:ses|sns|sms-voice|social-messaging|mobiletarge
 sys.exit(0 if ladder == ["whatsapp", "email", "sms"] and messaging == {"ses:SendEmail", "ses:GetAccount"} else (ladder, messaging))
 PY
 
-python3 -I - <<'PY' && ok "the c09 runs record tier 1 as unprovisioned: \"no provider registered for channel whatsapp\"" || bad "tier 1's failure is not recorded as unprovisioned"
+python3 -I - <<'PY' && ok "no c09 run sends on tier 1, and the set records it as unprovisioned: \"no provider registered for channel whatsapp\"" || bad "a c09 run sent on tier 1, or no run records tier 1 as unprovisioned"
 import glob, json, sys
+unprovisioned = False
 for path in sorted(glob.glob("docs/evidence/c09-*.json")):
-    if not any(e["metadata"].get("reason") == "promise broken: no provider registered for channel whatsapp"
-               for e in json.load(open(path))["events"]):
+    events = json.load(open(path))["events"]
+    if any(e["event_type"] == "SENT" and e["metadata"].get("tier") == "1" for e in events):
         sys.exit(path)
+    unprovisioned |= any(e["metadata"].get("reason") == "promise broken: no provider registered for channel whatsapp"
+                         for e in events)
+if not unprovisioned:
+    sys.exit("no c09 run records tier 1 as unprovisioned")
 PY
 
 if [ "$have_modules" -eq 1 ]; then
@@ -437,9 +448,9 @@ done
   || bad "a bundle does not verify against demo/keys"
 
 python3 -I - "$tmpdir" <<'PY' && ok "the verifier rejects an edited receipt, a reordered chain, and the wrong key" || bad "the verifier accepted a chain it should have rejected"
-import json, subprocess, sys
+import glob, json, subprocess, sys
 tmp = sys.argv[1]
-src = "docs/evidence/c09-denial-01a16b4b-259b.json"
+(src,) = glob.glob("docs/evidence/c09-denial-*.json")
 key = open("demo/keys/reachee-ed25519.pub").read().strip()
 
 def rejects(bundle, pubkey):

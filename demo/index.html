@@ -393,13 +393,12 @@ const SCENARIO = {
 };
 const PROVIDER_LABEL = {email: "Amazon SES v2"};
 const RUNS = {
-  "c09-direction": ["Direction releases (24 Oct run)", "criterion 09"],
-  "c09-live-ses-direction": ["Direction releases (25 Oct run)", "criterion 09"],
+  "c09-direction": ["Direction releases", "criterion 09"],
   "c09-denial":    ["Denial releases nothing", "criterion 09"],
   "c09-timeout":   ["Timeout releases nothing", "criterion 09"],
   "c05-breaker":   ["Open breaker skips a tier", "criterion 05"],
 };
-const RUN_ORDER = ["c09-direction", "c09-live-ses-direction", "c09-denial", "c09-timeout", "c05-breaker"];
+const RUN_ORDER = ["c09-direction", "c09-denial", "c09-timeout", "c05-breaker"];
 const TERMINAL = new Set(["RESOLVED", "DENIED", "TIMED_OUT"]);
 const VERDICTS = new Set(["COALESCED", "DEFERRED", "SUPPRESSED"]);
 
@@ -853,7 +852,7 @@ function setMode(mode){
   notice(""); clearView();
   $("rpagesub").textContent = mode === "live" ? "Raise a live escalation. Click any receipt to inspect it." : "Choose a past run. Click any receipt to inspect it.";
   if (mode === "live"){ $("stepline").innerHTML = liveIntro(); $("nextbtn").textContent = "Raise the escalation"; $("nextbtn").disabled = false; }
-  else $("stepline").innerHTML = '<span class="k">PAST RUNS</span>Five escalations run against the deployed stack and committed as evidence: two directions that release, a denial and a timeout that release nothing, and an open breaker that skips a tier. Each verifies in this browser and downloads as the bundle verify/verify_chain.py reads.';
+  else $("stepline").innerHTML = '<span class="k">PAST RUNS</span>Four escalations run against the deployed stack and committed as evidence: a direction that releases, a denial and a timeout that release nothing, and an open breaker that skips a tier. Each verifies in this browser and downloads as the bundle verify/verify_chain.py reads.';
 }
 (async function start(){
   try {

@@ -4,14 +4,17 @@
 credits brought the amount billed to $0.00, so the billed figure says nothing about
 what the build used. The usage figure is the one to read.
 
-Pulled from Cost Explorer on 26 October 2026 at 11:29 UTC, covering usage from
-2026-10-01 up to but not including 2026-10-27. Cost Explorer marks the period
-`Estimated` and lags by up to a day, so the latest hours are not in it yet.
+Pulled from Cost Explorer on 26 October 2026 at 11:29 UTC, and pulled again at
+13:36 UTC with the same result, for usage from 2026-10-01 up to but not
+including 2026-10-27. Cost Explorer marks the period `Estimated` and lags by up
+to a day.
 
-That figure covers every Reachee resource since the stack was first applied on
-23 October. That includes every live run, among them the runs behind the
-committed evidence bundles, and the deployed demo page. The figure moves as the
-month continues.
+In practice the figure covers usage from the first apply on 23 October through
+25 October: the demo page, and the live runs of those days, among them the one
+behind `c05-breaker`. It does not include the runs of 26 October, which produced
+the three `c09-` bundles. The daily breakdown for 26 October shows no SES usage
+yet, only the prorated cost of the stored secret. The figure moves as the month
+continues.
 
 | Service | Usage before credits (USD) |
 | --- | ---: |

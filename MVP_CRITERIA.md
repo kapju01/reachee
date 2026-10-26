@@ -18,8 +18,10 @@ connection open while a person decides. The decision is not pushed back: there i
 callback, so the caller reads it later with `GET /escalation/{id}`, polling until the
 escalation closes.
 
-This criterion is about behavior, not speed. One raise against the deployed stack,
-including a cold start, measured 1575 ms. That is a single sample, not a latency figure.
+This criterion is about behavior, not speed. Four raises against the deployed stack on 26
+October measured 236, 524, 842 and 1570 ms. Two of the sub-second ones ran on fresh
+containers, so the spread is not a cold-versus-warm split. Those are four samples, not a
+latency figure.
 
 ## 02. Contact policy is resolved before any provider is touched
 

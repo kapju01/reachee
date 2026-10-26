@@ -1,27 +1,37 @@
 # Criterion 09: live evidence
 
-Criterion 09 says that a person's direction releases the held action, and that a
-denial and a timeout do not. Each of the three outcomes was run once against the deployed
-stack in `us-west-2` on 23 October 2026, under the production Heart-Map policy.
-All three chains verify against the published key with the independent
-verifier.
+Criterion 09 says that a person's direction releases the held action, and that
+a denial and a timeout do not. Each of the three outcomes was run once against
+the deployed stack in `us-west-2` on 26 October 2026, under the deployed
+Heart-Map policy, after commit `cf81e68` was deployed. Every receipt below was
+written by that code. All three chains verify against the published key with
+the independent verifier.
 
 | Outcome   | Escalation id                          | Terminal state | Terminal receipt | `released` |
 |-----------|----------------------------------------|----------------|------------------|------------|
-| Direction | `01a16b5f-f8a7-747a-a48b-48300767bc42` | `Release`      | `RESOLVED`       | `true`     |
-| Denial    | `01a16b4b-259b-770b-b6ad-252d80b2b577` | `Denied`       | `DENIED`         | `false`    |
-| Timeout   | `01a16a5a-10cc-73d2-8241-a34d3bbfc712` | `TimedOut`     | `TIMED_OUT`      | `false`    |
+| Direction | `01a17829-dfaf-7418-8022-4d7124bc9c64` | `Release`      | `RESOLVED`       | `true`     |
+| Denial    | `01a17825-4314-73ea-8300-60838de1e3bc` | `Denied`       | `DENIED`         | `false`    |
+| Timeout   | `01a17849-b46a-72c6-b83b-10b10475055b` | `TimedOut`     | `TIMED_OUT`      | `false`    |
 
 No chain contains a release receipt other than the direction run's `RESOLVED`.
 The denial chain and the timeout chain contain no `RESOLVED` at all.
 
-The direction run uses the demo scenario, because it is the run the walkthrough
-and the video show. A remote patient monitoring agent saw a single home
-blood-pressure reading far outside the patient's thirty-day band, and the
-readings after it were back inside it. The agent asked the clinician to direct
-patient outreach. The denial and timeout runs prove properties where the
-scenario does not matter: a denial does not release, and a timeout does not
-release. They were raised with a test payload.
+## Tier 1 takes both of its paths
+
+Tier 1 (WhatsApp) has no provider, so every run fails there and moves on to
+tier 2. How it fails depends on the breaker, which is kept in the table and
+holds across invocations:
+
+- **`FAILED`, breaker `OPEN`** (denial, timeout). The breaker was past its
+  cooldown, so the attempt was let through, found no provider, wrote the
+  broken promise, and opened the breaker again.
+- **`ESCALATED`, breaker `OPEN`** (direction). It was raised five minutes after
+  the denial re-opened the breaker, inside the cooldown, so the tier was
+  skipped without an attempt and the skip was written with its reason.
+
+The receipts differ on purpose, and the outcome does not depend on which path
+tier 1 took. Together with `c05-breaker-01a16e4e-76fb.json`, a timeout on the
+skip path, the committed set shows both tier-1 paths across different outcomes.
 
 ## Reproducing the verification
 
@@ -30,77 +40,70 @@ without access to our account:
 
 ```
 PUB=https://d1bskent938hm6.cloudfront.net/keys/reachee-ed25519.pub
-python3 -I verify/verify_chain.py docs/evidence/c09-direction-01a16b5f-f8a7.json --pubkey $PUB
-python3 -I verify/verify_chain.py docs/evidence/c09-denial-01a16b4b-259b.json    --pubkey $PUB
-python3 -I verify/verify_chain.py docs/evidence/c09-timeout-01a16a5a-10cc.json   --pubkey $PUB
+python3 -I verify/verify_chain.py docs/evidence/c09-direction-01a17829-dfaf.json --pubkey $PUB
+python3 -I verify/verify_chain.py docs/evidence/c09-denial-01a17825-4314.json --pubkey $PUB
+python3 -I verify/verify_chain.py docs/evidence/c09-timeout-01a17849-b46a.json --pubkey $PUB
 ```
 
 The verifying key is
 `85c96a3b16a44e63e39da3ce3078119356ba0b5a9d60929c811e7c1d3b90b23e`, the same as
-`demo/keys/reachee-ed25519.pub`. Each bundle carries the full event: hashes,
-`prev_hash` links and signatures. The tables below show the receipt sequence;
-the hashes and signatures they omit are in the bundles.
-
-All three runs predate the change that replaced `correlation_id` in receipts
-with `correlation_hash`, the SHA-256 of the caller's id. Their receipts carry
-the plaintext correlation ids shown in the tables below. The bundles are left
-exactly as exported; regenerating them would replace the evidence, not fix it.
-They still verify, because the verifier recomputes the canonical form over
-whatever metadata keys an event carries, in sorted order. Receipts written
-after the change carry `correlation_hash` and no `correlation_id`.
+`demo/keys/reachee-ed25519.pub`, which `make criteria` and the output below
+use. Each bundle carries the full event: hashes, `prev_hash` links and
+signatures. The tables below show the receipt sequence; the hashes and
+signatures they omit are in the bundles.
 
 ## Conditions common to all three
 
 - State machine: `arn:aws:states:us-west-2:335019467476:stateMachine:reachee-escalation`
   (Step Functions Standard). The execution name is the escalation id.
 - Recipient: Heart-Map contact `justin-kaplan`.
-- Ladder: tier 1 WhatsApp, tier 2 email (Amazon SES v2), tier 3 SMS.
-- Tier 1 has no provider. Its attempt writes `FAILED` and opens the breaker.
-  The execution then moves to tier 2, where SES accepts the message.
-  Every run below took this path.
+- Ladder: tier 1 WhatsApp, tier 2 email (Amazon SES v2), tier 3 SMS. Tier 3 is
+  never reached: tier 2 delivers, and its timeout ends the escalation.
 - The tier 2 answer window is the Heart-Map's `timeout_seconds` of 900.
   `AwaitAnswer` read it from the attempt's output through `TimeoutSecondsPath`,
   and each execution history shows `timeoutInSeconds: 900`. The reply link
   expires at the same moment.
-- Each answer was given through the emailed reply link, on the recipient's phone.
-- Priority `P1` throughout. The agent id is `rpm-vitals-monitor-07` on the
-  direction run and `scout-meds` on the other two.
+- Each answer was given through the emailed reply link.
+- Priority `P1` and agent `rpm-vitals-monitor-07` throughout. Each run was
+  raised with a correlation id, which every receipt carries only as
+  `correlation_hash`, its SHA-256.
 
 Times are UTC. The deployment's Heart-Map time zone is America/Chicago (CDT, UTC−5).
 
 ## 1. Direction releases
 
-- Escalation id: `01a16b5f-f8a7-747a-a48b-48300767bc42`
-- Execution ARN: `arn:aws:states:us-west-2:335019467476:execution:reachee-escalation:01a16b5f-f8a7-747a-a48b-48300767bc42`
+- Escalation id: `01a17829-dfaf-7418-8022-4d7124bc9c64`
+- Bundle: `docs/evidence/c09-direction-01a17829-dfaf.json`
+- Execution ARN: `arn:aws:states:us-west-2:335019467476:execution:reachee-escalation:01a17829-dfaf-7418-8022-4d7124bc9c64`
 - Status: `SUCCEEDED`
-- Started: 2026-10-24T00:46:54.274Z
-- Stopped: 2026-10-24T00:52:55.532Z
+- Started: 2026-10-26T12:22:52.814Z
+- Stopped: 2026-10-26T12:23:22.967Z
 - Path: `Attempt → RouteAttempt → NextTier → Attempt → RouteAttempt → AwaitAnswer → DecideAnswer → Release`
-- Reply slot: armed 00:46:55.697Z, link expiry 01:01:55.025Z, nonce spent
-  00:52:55.222Z, decision `direction`.
-- The clinician pressed Give direction and wrote a note. The classifier found
-  that the note agreed with the button. The chain holds only the note's hash.
+- Reply slot: armed 12:22:53.603Z, link expiry 12:37:53.255Z, nonce spent 12:23:22.673Z, decision `direction`.
+- The clinician pressed Give direction and wrote a note. The classifier
+  checked the note against its word list for a refusal and found none, which
+  is all its confidence value claims. The chain holds only the note's hash.
 
 | # | Type           | Timestamp                    | Event id                               | Metadata |
 |---|----------------|------------------------------|----------------------------------------|----------|
-| 1 | `PROMISED`     | 2026-10-24T00:46:54.174608Z  | `01a16b5f-f8de-7a82-a507-ce3faea4c4d5` | promise "attempt delivery on the declared ladder in order and report each outcome"; agent `rpm-vitals-monitor-07`; correlation `rpm-bp-1792802813` |
-| 2 | `FAILED`       | 2026-10-24T00:46:54.901190Z  | `01a16b5f-fbb5-760d-a5e5-614ad8ee3f7a` | tier 1, whatsapp, breaker `OPEN`, "promise broken: no provider registered for channel whatsapp" |
-| 3 | `SENT`         | 2026-10-24T00:46:55.191180Z  | `01a16b5f-fcd7-7ea8-93e4-1751b234aa32` | tier 2, email, provider `ses-v2`, provider_msg_id `010101a16b5ffc72-1dff85a8-4a58-4827-a5d3-ee3067e175ca-000000` |
-| 4 | `RECEIVED`     | 2026-10-24T00:52:55.246028Z  | `01a16b65-7b4e-7d65-b6b6-84b3aa03c820` | via reply link |
-| 5 | `ACKNOWLEDGED` | 2026-10-24T00:52:55.262143Z  | `01a16b65-7b5e-7352-8931-08a64ec160b4` | intent `direction`, confidence "button and note agree", classifier "button and text, rules v1" |
-| 6 | `RESOLVED`     | 2026-10-24T00:52:55.479177Z  | `01a16b65-7c37-7837-a971-ef6dbe581b42` | **released `true`**, intent `direction` |
+| 1 | `PROMISED`     | 2026-10-26T12:22:52.730853Z  | `01a17829-e03a-7929-8484-09aebe0f9ace` | promise "attempt delivery on the declared ladder in order and report each outcome"; agent `rpm-vitals-monitor-07`; correlation_hash `694ad9fc4b88…` |
+| 2 | `ESCALATED`    | 2026-10-26T12:22:53.135982Z  | `01a17829-e1cf-7ee4-ac64-f7082015185e` | tier 1, whatsapp, breaker `OPEN`, "circuit breaker is OPEN, tier skipped" |
+| 3 | `SENT`         | 2026-10-26T12:22:53.468123Z  | `01a17829-e31c-7519-9c92-daa2428d4d5d` | tier 2, email, provider `ses-v2`, provider_msg_id `010101a17829e29e-f51d27ce-9f93-4825-8f52-dd56ce419d9b-000000`, empathy_source `fallback` |
+| 4 | `RECEIVED`     | 2026-10-26T12:23:22.683749Z  | `01a1782a-553b-762e-8318-21eb82fab9cb` | via reply link |
+| 5 | `ACKNOWLEDGED` | 2026-10-26T12:23:22.703936Z  | `01a1782a-554f-76dd-992d-31208c5e73ae` | intent `direction`, confidence "button; note contains no contradicting term", classifier "button and text, rules v1" |
+| 6 | `RESOLVED`     | 2026-10-26T12:23:22.912063Z  | `01a1782a-5620-7591-8157-3a179a6769bb` | **released `true`**, intent `direction`, confidence "button; note contains no contradicting term" |
 
 ```
 verifying key: 85c96a3b16a44e63e39da3ce3078119356ba0b5a9d60929c811e7c1d3b90b23e
-key source:    https://d1bskent938hm6.cloudfront.net/keys/reachee-ed25519.pub
+key source:    demo/keys/reachee-ed25519.pub
 events:        6
 
-  01a16b5f-f8d PROMISED       signature MATCH  chain LINKED
-  01a16b5f-fbb FAILED         signature MATCH  chain LINKED
-  01a16b5f-fcd SENT           signature MATCH  chain LINKED
-  01a16b65-7b4 RECEIVED       signature MATCH  chain LINKED
-  01a16b65-7b5 ACKNOWLEDGED   signature MATCH  chain LINKED
-  01a16b65-7c3 RESOLVED       signature MATCH  chain LINKED
+  01a17829-e03 PROMISED       signature MATCH  chain LINKED
+  01a17829-e1c ESCALATED      signature MATCH  chain LINKED
+  01a17829-e31 SENT           signature MATCH  chain LINKED
+  01a1782a-553 RECEIVED       signature MATCH  chain LINKED
+  01a1782a-554 ACKNOWLEDGED   signature MATCH  chain LINKED
+  01a1782a-562 RESOLVED       signature MATCH  chain LINKED
 
 no field in this bundle is long enough to hold a message body
 
@@ -109,36 +112,38 @@ CHAIN VERIFIED: 6 events, every signature and every link
 
 ## 2. Denial does not release
 
-- Escalation id: `01a16b4b-259b-770b-b6ad-252d80b2b577`
-- Execution ARN: `arn:aws:states:us-west-2:335019467476:execution:reachee-escalation:01a16b4b-259b-770b-b6ad-252d80b2b577`
-- Status: `SUCCEEDED`. The execution completes, but the held action is not
-  released.
-- Started: 2026-10-24T00:24:09.417Z
-- Stopped: 2026-10-24T00:25:43.757Z
+- Escalation id: `01a17825-4314-73ea-8300-60838de1e3bc`
+- Bundle: `docs/evidence/c09-denial-01a17825-4314.json`
+- Execution ARN: `arn:aws:states:us-west-2:335019467476:execution:reachee-escalation:01a17825-4314-73ea-8300-60838de1e3bc`
+- Status: `SUCCEEDED`. The execution completes, but the held action is not released.
+- Started: 2026-10-26T12:17:50.512Z
+- Stopped: 2026-10-26T12:20:45.203Z
 - Path: `Attempt → RouteAttempt → NextTier → Attempt → RouteAttempt → AwaitAnswer → DecideAnswer → Denied`
-- Reply slot: armed 00:24:10.717Z, link expiry 00:39:10.121Z, nonce spent
-  00:25:43.535Z, decision `denial`.
+- Reply slot: armed 12:17:51.510Z, link expiry 12:32:51.205Z, nonce spent 12:20:44.957Z, decision `denial`.
+- The clinician pressed Deny and wrote a note. The classifier checked the
+  note against its word list for an approval and found none. The answer is
+  classified from the button, and the receipt names exactly that check.
 
 | # | Type           | Timestamp                    | Event id                               | Metadata |
 |---|----------------|------------------------------|----------------------------------------|----------|
-| 1 | `PROMISED`     | 2026-10-24T00:24:09.382292Z  | `01a16b4b-25a6-7ef6-a827-5ab5c66c434b` | promise "attempt delivery on the declared ladder in order and report each outcome"; correlation `test-D-1792801448` |
-| 2 | `FAILED`       | 2026-10-24T00:24:09.999079Z  | `01a16b4b-280f-7faf-b270-553a5d63e653` | tier 1, whatsapp, breaker `OPEN`, "promise broken: no provider registered for channel whatsapp" |
-| 3 | `SENT`         | 2026-10-24T00:24:10.284822Z  | `01a16b4b-292c-7887-9be7-aeee3784ccfe` | tier 2, email, provider `ses-v2`, provider_msg_id `010101a16b4b28c6-beabafa1-ffcd-444e-a29e-0b74ff903954-000000` |
-| 4 | `RECEIVED`     | 2026-10-24T00:25:43.543860Z  | `01a16b4c-9577-7d9b-b16b-dd4903ef07b4` | via reply link |
-| 5 | `ACKNOWLEDGED` | 2026-10-24T00:25:43.559473Z  | `01a16b4c-9587-798d-aba1-36153c070bd1` | intent `denial`, confidence "button and note agree", classifier "button and text, rules v1" |
-| 6 | `DENIED`       | 2026-10-24T00:25:43.696681Z  | `01a16b4c-9610-788a-afae-2cc31d2b876b` | **released `false`**, intent `denial`, "the person denied the held action" |
+| 1 | `PROMISED`     | 2026-10-26T12:17:50.427876Z  | `01a17825-435b-7d0a-9f31-6cb2d104f003` | promise "attempt delivery on the declared ladder in order and report each outcome"; agent `rpm-vitals-monitor-07`; correlation_hash `230fb7ed8bee…` |
+| 2 | `FAILED`       | 2026-10-26T12:17:51.079780Z  | `01a17825-45e7-72f0-b2e8-36740538ee3c` | tier 1, whatsapp, breaker `OPEN`, "promise broken: no provider registered for channel whatsapp" |
+| 3 | `SENT`         | 2026-10-26T12:17:51.384560Z  | `01a17825-4718-7917-b6e5-35cc1368874b` | tier 2, email, provider `ses-v2`, provider_msg_id `010101a1782546ad-0675f766-a2b2-48fe-87fd-9c24ceca36e5-000000`, empathy_source `fallback` |
+| 4 | `RECEIVED`     | 2026-10-26T12:20:44.964927Z  | `01a17827-ed24-7388-8c98-3316c5472149` | via reply link |
+| 5 | `ACKNOWLEDGED` | 2026-10-26T12:20:44.970792Z  | `01a17827-ed2a-7048-95dd-ff5b90f7b5d0` | intent `denial`, confidence "button; note contains no contradicting term", classifier "button and text, rules v1" |
+| 6 | `DENIED`       | 2026-10-26T12:20:45.158704Z  | `01a17827-ede6-78c1-a817-ed422ad45ea0` | **released `false`**, intent `denial`, confidence "button; note contains no contradicting term", "the person denied the held action" |
 
 ```
 verifying key: 85c96a3b16a44e63e39da3ce3078119356ba0b5a9d60929c811e7c1d3b90b23e
-key source:    https://d1bskent938hm6.cloudfront.net/keys/reachee-ed25519.pub
+key source:    demo/keys/reachee-ed25519.pub
 events:        6
 
-  01a16b4b-25a PROMISED       signature MATCH  chain LINKED
-  01a16b4b-280 FAILED         signature MATCH  chain LINKED
-  01a16b4b-292 SENT           signature MATCH  chain LINKED
-  01a16b4c-957 RECEIVED       signature MATCH  chain LINKED
-  01a16b4c-958 ACKNOWLEDGED   signature MATCH  chain LINKED
-  01a16b4c-961 DENIED         signature MATCH  chain LINKED
+  01a17825-435 PROMISED       signature MATCH  chain LINKED
+  01a17825-45e FAILED         signature MATCH  chain LINKED
+  01a17825-471 SENT           signature MATCH  chain LINKED
+  01a17827-ed2 RECEIVED       signature MATCH  chain LINKED
+  01a17827-ed2 ACKNOWLEDGED   signature MATCH  chain LINKED
+  01a17827-ede DENIED         signature MATCH  chain LINKED
 
 no field in this bundle is long enough to hold a message body
 
@@ -147,50 +152,38 @@ CHAIN VERIFIED: 6 events, every signature and every link
 
 ## 3. Timeout does not release
 
-- Escalation id: `01a16a5a-10cc-73d2-8241-a34d3bbfc712`
-- Execution ARN: `arn:aws:states:us-west-2:335019467476:execution:reachee-escalation:01a16a5a-10cc-73d2-8241-a34d3bbfc712`
-- Status: `SUCCEEDED`. The execution completes, but the held action is not
-  released.
-- Started: 2026-10-23T20:00:50.024Z
-- Stopped: 2026-10-23T20:15:51.654Z
+- Escalation id: `01a17849-b46a-72c6-b83b-10b10475055b`
+- Bundle: `docs/evidence/c09-timeout-01a17849-b46a.json`
+- Execution ARN: `arn:aws:states:us-west-2:335019467476:execution:reachee-escalation:01a17849-b46a-72c6-b83b-10b10475055b`
+- Status: `SUCCEEDED`. The execution completes, but the held action is not released.
+- Started: 2026-10-26T12:57:38.794Z
+- Stopped: 2026-10-26T13:12:40.837Z
 - Path: `Attempt → RouteAttempt → NextTier → Attempt → RouteAttempt → AwaitAnswer → TimedOut`
-- `AwaitAnswer` ended with `TaskTimedOut`, error `States.Timeout`, at
-  20:15:50.977Z. The timeout was caught and routed to `TimedOut`.
-- Reply slot:
-  - Armed 20:00:51.450Z, with a task token present.
-  - The link expired at 20:15:50.667Z, about 0.3 s before the state machine
-    stopped waiting.
-  - Closed 20:15:51.517Z with reason `timeout`.
-  - The nonce was never spent: no `spent_at`, no decision, and no answer stored.
+- Reply slot: armed 2026-10-26T12:57:40.577Z, expiry 2026-10-26T13:12:39.671Z; the nonce was never spent, and the slot closed at 13:12:40.708Z with reason `timeout`.
 
 | # | Type        | Timestamp                    | Event id                               | Metadata |
 |---|-------------|------------------------------|----------------------------------------|----------|
-| 1 | `PROMISED`  | 2026-10-23T20:00:49.924590Z  | `01a16a5a-1104-7831-8c0d-13b0442721b3` | promise "attempt delivery on the declared ladder in order and report each outcome"; correlation `bed-4-k-1792785649` |
-| 2 | `FAILED`    | 2026-10-23T20:00:50.551114Z  | `01a16a5a-1377-73d0-93c1-cc0a416e342b` | tier 1, whatsapp, breaker `OPEN`, "promise broken: no provider registered for channel whatsapp" |
-| 3 | `SENT`      | 2026-10-23T20:00:50.853442Z  | `01a16a5a-14a5-7361-aac1-c375d618d5d4` | tier 2, email, provider `ses-v2`, provider_msg_id `010101a16a5a1444-826cf88a-0c54-4418-a6bb-756f59e42d04-000000` |
-| 4 | `TIMED_OUT` | 2026-10-23T20:15:51.599063Z  | `01a16a67-d32f-79a0-96a5-e85a36fc3f03` | **released `false`**, "no answer within the declared window; a timeout is not consent" |
+| 1 | `PROMISED`  | 2026-10-26T12:57:38.708927Z  | `01a17849-b494-79af-8bc2-957c5b75c45c` | promise "attempt delivery on the declared ladder in order and report each outcome"; agent `rpm-vitals-monitor-07`; correlation_hash `cac9c2f33352…` |
+| 2 | `FAILED`    | 2026-10-26T12:57:39.578073Z  | `01a17849-b7fa-7b17-b54a-b6650ce35bf6` | tier 1, whatsapp, breaker `OPEN`, "promise broken: no provider registered for channel whatsapp" |
+| 3 | `SENT`      | 2026-10-26T12:57:40.062384Z  | `01a17849-b9de-77ed-a410-e3a66366a62a` | tier 2, email, provider `ses-v2`, provider_msg_id `010101a17849b8a4-5fa81135-eabd-44f7-a95c-374252dfe5bb-000000`, empathy_source `fallback` |
+| 4 | `TIMED_OUT` | 2026-10-26T13:12:40.773170Z  | `01a17857-7845-7c88-9ad9-50cb6648113a` | **released `false`**, "no answer within the declared window; a timeout is not consent" |
 
 There is no `RECEIVED`, `ACKNOWLEDGED` or `RESOLVED` in this chain.
 
 ```
 verifying key: 85c96a3b16a44e63e39da3ce3078119356ba0b5a9d60929c811e7c1d3b90b23e
-key source:    https://d1bskent938hm6.cloudfront.net/keys/reachee-ed25519.pub
+key source:    demo/keys/reachee-ed25519.pub
 events:        4
 
-  01a16a5a-110 PROMISED       signature MATCH  chain LINKED
-  01a16a5a-137 FAILED         signature MATCH  chain LINKED
-  01a16a5a-14a SENT           signature MATCH  chain LINKED
-  01a16a67-d32 TIMED_OUT      signature MATCH  chain LINKED
+  01a17849-b49 PROMISED       signature MATCH  chain LINKED
+  01a17849-b7f FAILED         signature MATCH  chain LINKED
+  01a17849-b9d SENT           signature MATCH  chain LINKED
+  01a17857-784 TIMED_OUT      signature MATCH  chain LINKED
 
 no field in this bundle is long enough to hold a message body
 
 CHAIN VERIFIED: 4 events, every signature and every link
 ```
-
-**Demonstrated, not proven:** the recipient opened the link after it expired, and
-the page refused. By design, a refused request writes nothing, and the API keeps
-no access logs. So the stored state shows the result of that refusal (an unspent
-nonce and no answer receipts after expiry) but not the request itself.
 
 ## Reading the evidence
 
@@ -198,10 +191,14 @@ nonce and no answer receipts after expiry) but not the request itself.
   the id SES returned, not one we generated.
 - `RECEIVED` records that a person answered through the link. `ACKNOWLEDGED`
   records how that answer was classified. Delivery receipts stand for neither.
+- `confidence` names the check the classifier made, not a judgment it cannot
+  make: `button` when there is no note, and "button; note contains no
+  contradicting term" when a note was checked against the opposite button's
+  word list.
 - `released` appears only on terminal receipts, and only the direction run has
   `true`.
 - Metadata values are strings in the signed canonical form, so `released` is
   the string `"true"` or `"false"`.
-- No receipt carries the message body or the answer text. `message_hash` is a
-  SHA-256 content hash, and the verifier checks that no field is long enough to
-  hold a body.
+- No receipt carries the message body, the answer text, or the caller's
+  correlation id. `message_hash` is a SHA-256 content hash, and the verifier
+  checks that no field is long enough to hold a body.

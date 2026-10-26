@@ -1,0 +1,78 @@
+{
+  "public_key": "85c96a3b16a44e63e39da3ce3078119356ba0b5a9d60929c811e7c1d3b90b23e",
+  "genesis": "0000000000000000000000000000000000000000000000000000000000000000",
+  "events": [
+    {
+      "event_id": "01a17849-b494-79af-8bc2-957c5b75c45c",
+      "event_type": "PROMISED",
+      "message_hash": "bcd63ab199fc9a403c5f439b588747b0ef7972685ee13b17f11736993fcf24eb",
+      "metadata": {
+        "agent_id": "rpm-vitals-monitor-07",
+        "correlation_hash": "cac9c2f333526ef424e07ffb40e3ffb5fdabaf1fe47e2f771a38e545d7bfa74d",
+        "priority": "P1",
+        "promise": "attempt delivery on the declared ladder in order and report each outcome"
+      },
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a17849-b46a-72c6-b83b-10b10475055b",
+      "signature": "1bd497ddbe2537c76ccccf0497a2267c001f3705442c2e0214839ebaf6a1a65d2a3bcbd7241bb23072777188196523bdf71b55b06a1f4bdfb67530b8bb8dee0b",
+      "timestamp": "2026-10-26T12:57:38.708927Z"
+    },
+    {
+      "event_id": "01a17849-b7fa-7b17-b54a-b6650ce35bf6",
+      "event_type": "FAILED",
+      "message_hash": "bcd63ab199fc9a403c5f439b588747b0ef7972685ee13b17f11736993fcf24eb",
+      "metadata": {
+        "breaker_state": "OPEN",
+        "channel": "whatsapp",
+        "correlation_hash": "cac9c2f333526ef424e07ffb40e3ffb5fdabaf1fe47e2f771a38e545d7bfa74d",
+        "priority": "P1",
+        "reason": "promise broken: no provider registered for channel whatsapp",
+        "tier": "1"
+      },
+      "prev_hash": "cf2e42511b45dd41baf5f9004aeb5370a48acee1d1768aff8e525d282f3cb295",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a17849-b46a-72c6-b83b-10b10475055b",
+      "signature": "60c1508da37bb5435f2d05ab62d60db65d3c62480b75eef53644977ad28a588878c12d5230f53ea01c43c14362b92933aea6105b0171957f6cfea2a21c85d908",
+      "timestamp": "2026-10-26T12:57:39.578073Z"
+    },
+    {
+      "event_id": "01a17849-b9de-77ed-a410-e3a66366a62a",
+      "event_type": "SENT",
+      "message_hash": "bcd63ab199fc9a403c5f439b588747b0ef7972685ee13b17f11736993fcf24eb",
+      "metadata": {
+        "agent_id": "rpm-vitals-monitor-07",
+        "channel": "email",
+        "correlation_hash": "cac9c2f333526ef424e07ffb40e3ffb5fdabaf1fe47e2f771a38e545d7bfa74d",
+        "empathy_reason": "no model configured",
+        "empathy_source": "fallback",
+        "priority": "P1",
+        "provider_msg_id": "010101a17849b8a4-5fa81135-eabd-44f7-a95c-374252dfe5bb-000000",
+        "tier": "2"
+      },
+      "prev_hash": "16d526fc18b4f596be8acf7f84a45774b0f9e03a54f2f20622260e9d323459c0",
+      "provider_name": "ses-v2",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a17849-b46a-72c6-b83b-10b10475055b",
+      "signature": "085b475ada1a82bcc7b28f04a34432a6d66d82f5a75e042f426e9e03cd30454f25945ea9299029fb988330db19d1f40eb75a365d38aad3dc79a60f8e621bc205",
+      "timestamp": "2026-10-26T12:57:40.062384Z"
+    },
+    {
+      "event_id": "01a17857-7845-7c88-9ad9-50cb6648113a",
+      "event_type": "TIMED_OUT",
+      "message_hash": "",
+      "metadata": {
+        "reason": "no answer within the declared window; a timeout is not consent",
+        "released": "false"
+      },
+      "prev_hash": "1d092f4af109637ad2d16e866c50008545eeba341209fd541bc8702262efa400",
+      "provider_name": "",
+      "recipient_id": "justin-kaplan",
+      "request_id": "01a17849-b46a-72c6-b83b-10b10475055b",
+      "signature": "6f39ee2748c26ae2060b2872d5add1f2d1883ed02afea20ab7b3b2e533619a5fcae873c340b33c5ef77c8c17e9dbc34d5dc9a7628d766910af847dee39faf409",
+      "timestamp": "2026-10-26T13:12:40.773170Z"
+    }
+  ]
+}

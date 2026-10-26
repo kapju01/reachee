@@ -177,8 +177,12 @@ Binding on `cmd/raise`, `cmd/attempt`, and `cmd/reply`. All three meet them
 today; a change that breaks either is wrong.
 
 - The signing key is fetched from Secrets Manager once, at init, into a
-  package-level variable, and never per invocation. Criterion 01 allows under
-  a second, and a Secrets Manager call on a cold start will not make that.
+  package-level variable, and never per invocation. Criterion 01 is about
+  behavior, not speed, but the handoff aims to return in under a second. It
+  does not always: four raises against the deployed stack on 26 October
+  measured 236, 524, 842 and 1570 ms, and two of the sub-second ones ran on
+  fresh containers, so the spread is not a cold-versus-warm split. A Secrets
+  Manager call per invocation would add to every raise.
 - `reply` refuses out loud when it finds no armed task token for the
   escalation. It returns an explicit error to the caller and never silently
   waits, retries, or records the decision for later.

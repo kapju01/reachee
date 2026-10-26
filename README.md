@@ -62,7 +62,7 @@ This needs only Python 3 and its standard library. `-I` keeps the
 interpreter from importing anything from the working directory.
 
     PUB=https://d1bskent938hm6.cloudfront.net/keys/reachee-ed25519.pub
-    python3 -I verify/verify_chain.py docs/evidence/c09-denial-01a16b4b-259b.json --pubkey $PUB
+    python3 -I verify/verify_chain.py docs/evidence/c09-denial-01a17825-4314.json --pubkey $PUB
 
 Expected output ends:
 
@@ -145,25 +145,25 @@ Verify them against the project's published key, as in step 2.
 
 ## Evidence bundles
 
-Five bundles are committed in `docs/evidence/`. All five were raised against
+Four bundles are committed in `docs/evidence/`. All four were raised against
 the deployed stack in `us-west-2` and delivered by Amazon SES v2: each carries
-a `SENT` receipt from `ses-v2` with the message id SES returned. All five
-verify against the published key with the command above.
+a `SENT` receipt from `ses-v2` with the message id SES returned. All four
+verify against the published key with the command above, and every receipt
+carries the caller's correlation id only as `correlation_hash`.
 
 | Bundle | Raised (UTC) | Receipts | Shows |
 | --- | --- | --- | --- |
-| `c09-direction-01a16b5f-f8a7.json` | 2026-10-24 00:46 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `RESOLVED` | A direction releases (`released: true`) |
-| `c09-denial-01a16b4b-259b.json` | 2026-10-24 00:24 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `DENIED` | A denial releases nothing |
-| `c09-timeout-01a16a5a-10cc.json` | 2026-10-23 20:00 | `PROMISED` `FAILED` `SENT` `TIMED_OUT` | A timeout releases nothing |
+| `c09-direction-01a17829-dfaf.json` | 2026-10-26 12:22 | `PROMISED` `ESCALATED` `SENT` `RECEIVED` `ACKNOWLEDGED` `RESOLVED` | A direction releases (`released: true`) |
+| `c09-denial-01a17825-4314.json` | 2026-10-26 12:17 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `DENIED` | A denial releases nothing |
+| `c09-timeout-01a17849-b46a.json` | 2026-10-26 12:57 | `PROMISED` `FAILED` `SENT` `TIMED_OUT` | A timeout releases nothing |
 | `c05-breaker-01a16e4e-76fb.json` | 2026-10-24 14:26 | `PROMISED` `ESCALATED` `SENT` `TIMED_OUT` | An open breaker skips tier 1 and says why |
-| `c09-live-ses-direction-01a172f0-9204.json` | 2026-10-25 12:02 | `PROMISED` `FAILED` `SENT` `RECEIVED` `ACKNOWLEDGED` `RESOLVED` | A second direction, fetched from `?format=bundle` |
 
-The three `c09-` runs from 23 and 24 October predate the change that put
-`correlation_hash` in receipts in place of `correlation_id`. Their receipts
-carry the caller's correlation id in plaintext, signed as recorded. They are
-left exactly as exported, because regenerating them would replace the
-evidence, not fix it. The 25 October run and the breaker run carry only the
-hash.
+The three `c09-` runs were raised on 26 October, after the code in this
+repository was deployed. Tier 1 fails in two ways across the set: `FAILED`
+when the breaker lets an attempt through and it finds no provider, and
+`ESCALATED` when the breaker is open and the tier is skipped.
+[`docs/criterion-09-evidence.md`](docs/criterion-09-evidence.md) walks each
+run.
 
 ## What is here
 
