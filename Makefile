@@ -1,7 +1,7 @@
 GO ?= go
 LAMBDAS := raise attempt reply status
 
-.PHONY: build lambdas apply test cover run fmt vet tidy clean FORCE
+.PHONY: build lambdas apply test criteria cover run fmt vet tidy clean FORCE
 
 build: lambdas
 	$(GO) build ./...
@@ -29,6 +29,11 @@ apply: lambdas
 
 test:
 	$(GO) test ./...
+
+# Each acceptance criterion in MVP_CRITERIA.md, asserted against the committed
+# evidence, the Go tests, and the Terraform and page source. Offline.
+criteria:
+	./scripts/criteria.sh
 
 cover:
 	$(GO) test -coverprofile=coverage.out ./internal/...

@@ -19,7 +19,19 @@ committed bundle and the published key.
 `MVP_CRITERIA.md` holds the ten pass-or-fail criteria. Criterion 09 (a
 direction releases, a denial and a timeout do not) is evidenced in
 `docs/criterion-09-evidence.md`, and criterion 05 (an open breaker skips a
-tier and says so) in `docs/criterion-05-evidence.md`.
+tier and says so) in `docs/criterion-05-evidence.md`. `make criteria` asserts
+all ten.
+
+There are two tiers of reproducibility, and they need different things:
+
+- **The central claim needs stock Python and nothing else.** One
+  `python3 -I verify/verify_chain.py` command verifies a committed bundle
+  against the published key (step 2 below).
+- **The full criteria harness needs a Go toolchain and its modules.**
+  `make criteria` runs offline, but the Go tests it cites import the AWS SDK.
+  So it needs Go 1.24 or later and one `go mod download` beforehand (step 3).
+  Without the modules, those checks print NOT ASSERTED naming that command,
+  and their criteria are counted as not asserted, never as met.
 
 ## Quick start
 
@@ -63,7 +75,22 @@ A live escalation verifies the same way, straight from the API:
     curl -s "https://un5ibyx5a1.execute-api.us-west-2.amazonaws.com/escalation/<id>?format=bundle" \
       | python3 -I verify/verify_chain.py /dev/stdin --pubkey $PUB
 
-### 3. Run the tests
+### 3. Check the criteria
+
+Prerequisites: Python 3, Go 1.24 or later, and the Go modules, fetched once:
+
+    go mod download
+    make criteria
+
+`scripts/criteria.sh` has one block per criterion, named by its number and
+its own wording in `MVP_CRITERIA.md`. It checks the committed bundles, the Go
+tests, the Terraform source, and the page source. It verifies signatures
+against `demo/keys/reachee-ed25519.pub` and never reaches the network. A
+criterion is met only if every check in its block passes. A criterion with no
+assertion behind it prints NOT ASSERTED and the reason, and is counted in the
+summary line. Any failed check makes the run exit nonzero.
+
+### 4. Run the tests
 
     make test
 
@@ -84,7 +111,7 @@ Under Node, it also runs the demo page's own verifier over every committed
 bundle. Without Node, that check prints `SKIP`, and the summary line counts
 it.
 
-### 4. Deploy your own
+### 5. Deploy your own
 
 Terraform 1.6 or later, the AWS CLI, and an account you can create IAM roles
 in. The region is fixed at `us-west-2`.
