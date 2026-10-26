@@ -16,7 +16,18 @@
 # criterion counts as not asserted, never as met.
 #
 # A criterion is met only if every check in its block passes. A FAIL in one
-# block does not stop the others. Exit status is nonzero if any check fails.
+# block does not stop the others. There are three outcomes, and only the first
+# says green:
+#
+#   exit 0  every criterion asserted and met: "criteria green"
+#   exit 1  any check failed: "criteria FAILED: ..."
+#   exit 2  nothing failed, but some criterion was not asserted:
+#           "criteria incomplete: ..." with the remedy. A judge's first
+#           command is often this one, before the prerequisites, and an
+#           unasserted criterion must not read as a pass.
+#
+# make reports any failed recipe as its own exit 2, so `make criteria` cannot
+# carry the 1; the last line still tells the outcomes apart.
 #
 #   ./scripts/criteria.sh
 
@@ -28,6 +39,7 @@ export GOPROXY=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly
 
 failed=""
 not_asserted=""
+met=""
 crit=""
 crit_failed=0
 crit_na=0
@@ -43,6 +55,7 @@ begin() {
 end() {
   if [ "$crit_failed" -eq 1 ]; then failed="$failed $crit"
   elif [ "$crit_na" -eq 1 ]; then not_asserted="$not_asserted $crit"
+  else met="$met $crit"
   fi
 }
 
@@ -510,8 +523,14 @@ if [ -n "$failed" ]; then
   printf '\n'
   exit 1
 fi
-if [ -n "$not_asserted" ]; then
-  printf '\ncriteria green, %d not asserted:%s\n' "$(count "$not_asserted")" "$not_asserted"
-else
-  printf '\ncriteria green\n'
+if [ -n "$not_asserted" ] || [ "$(count "$met")" -ne 10 ]; then
+  printf '\ncriteria incomplete: %d met, %d not asserted:%s\n' "$(count "$met")" "$(count "$not_asserted")" "$not_asserted"
+  if [ "$have_go" -eq 0 ]; then
+    printf 'install Go 1.24 or later, run go mod download once, then re-run make criteria\n'
+  else
+    printf 'run go mod download once, then re-run make criteria\n'
+  fi
+  exit 2
 fi
+printf '\ncriteria green\n'
+

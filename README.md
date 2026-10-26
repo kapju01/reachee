@@ -37,7 +37,7 @@ There are two tiers of reproducibility, and they need different things:
   `make criteria` runs offline, but the Go tests it cites import the AWS SDK.
   So it needs Go 1.24 or later and one `go mod download` beforehand (step 3).
   Without the modules, those checks print NOT ASSERTED naming that command,
-  and their criteria are counted as not asserted, never as met.
+  and the run ends `criteria incomplete`, never `criteria green`.
 
 ## Quick start
 
@@ -92,9 +92,20 @@ Prerequisites: Python 3, Go 1.24 or later, and the Go modules, fetched once:
 its own wording in `MVP_CRITERIA.md`. It checks the committed bundles, the Go
 tests, the Terraform source, and the page source. It verifies signatures
 against `demo/keys/reachee-ed25519.pub` and never reaches the network. A
-criterion is met only if every check in its block passes. A criterion with no
-assertion behind it prints NOT ASSERTED and the reason, and is counted in the
-summary line. Any failed check makes the run exit nonzero.
+criterion is met only if every check in its block passes. A check with no
+assertion behind it prints NOT ASSERTED and the reason. The last line is one
+of three:
+
+| Last line | `scripts/criteria.sh` exits | Means |
+| --- | --- | --- |
+| `criteria green` | 0 | All ten criteria were asserted and met. |
+| `criteria FAILED: <numbers>` | 1 | A check failed. The line names the criteria that failed, and any that were not asserted. |
+| `criteria incomplete: <n> met, <n> not asserted: <numbers>` | 2 | Nothing failed, but some criteria were not asserted. The next line gives the remedy, usually `go mod download`. |
+
+The word green appears only when every criterion was asserted. The exit codes
+are `scripts/criteria.sh`'s own. `make criteria` exits 2 for any failed
+recipe, so through `make` a failure and an incomplete run both exit 2, and the
+last line tells them apart.
 
 ### 4. Run the tests
 
