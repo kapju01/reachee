@@ -13,12 +13,19 @@ pass or fail. Nothing below is a roadmap item.
 ## 01. Handoff returns a receipt, not a wait
 
 A calling agent raises an escalation in one call and gets a correlation receipt back
-immediately. It holds no connection and it does not poll.
+in milliseconds, rather than holding the connection open while a person decides. The
+decision is not pushed back: there is no callback, so the caller reads it later with
+`GET /escalation/{id}`, polling until the escalation closes.
 
 ## 02. Contact policy is resolved before any provider is touched
 
 Who is on call, on which channels, in what order, inside which quiet hours, and against
-what attention budget: all resolved from declared policy, not from a code path.
+what attention budget: all resolved from the declared Heart-Map before any provider is
+touched. A value the Heart-Map declares is the value used. Where it omits one, the loader
+supplies a stated default: a tier waits 300 seconds, and the attention budget is 6 reaches
+an hour, a burst of 3, and a 90-second coalescing window. One fallback is a defect, not a
+default: a declared time zone that fails to load is read as UTC rather than refused. The
+README lists it under Known gaps.
 
 ## 03. Attention guardrails run first, and each decision writes a receipt
 
@@ -27,8 +34,11 @@ suppressed or deferred reach is recorded as a decision, not as silence.
 
 ## 04. The ladder is walked in order, never in parallel
 
-One tier at a time, against its declared timeout. No broadcast, no simultaneous pages,
-no second message for one event.
+One tier at a time. The next tier is tried only when the current one fails or is
+skipped. A tier that delivers waits for an answer for its own declared timeout, and when
+that wait runs out the escalation ends as `TimedOut`; no further tier is tried. Under the
+deployed Heart-Map, tier 2 (email) delivers and waits 900 seconds, so tier 3's 60 seconds
+never runs. No broadcast, no simultaneous pages, no second message for one event.
 
 ## 05. A broken promise is named as broken, and a skipped tier is signal
 
@@ -58,7 +68,10 @@ decision, and it is not a release.
 ## 10. The chain verifies cold, with no message body stored
 
 Every step is signed and hash-chained. A third party recomputes the chain against the
-published key, with no reading, identifier, or message body anywhere in the log.
+published key. The log holds no patient identifier, no reading, and no message body:
+content enters only as a hash, and so does the caller's correlation id. The recipient is
+named, deliberately, by the contact id declared in the Heart-Map (`recipient_id`), so a
+reader of the chain can see who was reached.
 
 ---
 

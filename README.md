@@ -358,6 +358,13 @@ It does not have, and is not meant to have:
   the `DEFERRED` receipt is written and the execution ends. Nothing raises it
   again when the window closes. This contradicts criterion 03's intent and is
   the open defect.
+- **A time zone that fails to load is read as UTC.** The Heart-Map loader
+  ignores the error from loading a declared `quiet_hours.timezone` and falls
+  back to UTC instead of refusing the document. A typo such as
+  `America/Chicgo` would move a Chicago clinician's 22:00–07:00 quiet hours
+  to 17:00–02:00 local time under daylight saving, and a 2am page would go
+  straight through. The deployed Heart-Map's zone loads, and
+  `raise` and `attempt` embed the zone database, so this is latent, not live.
 - **Attention-gate state is per execution environment.** Coalescing, the
   attention budget, and quiet hours keep their state in memory in `attempt`.
   Their decisions hold across warm invocations, not across cold starts. This
