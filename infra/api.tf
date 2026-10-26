@@ -39,9 +39,8 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_rate_limit  = 0.05
   }
 
-  # The account allows ten concurrent Lambda executions across every
-  # function. Polling and refreshing the chain must not take the slots a
-  # clinician's POST /reply needs.
+  # Polling and refreshing the chain must not crowd out a clinician's
+  # POST /reply.
   route_settings {
     route_key              = "GET /escalation/{id}"
     throttling_burst_limit = 2

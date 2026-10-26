@@ -200,7 +200,7 @@ run.
 | `infra/` | Terraform: one table, one secret container, four Lambdas, one Standard state machine, one HTTP API, and the demo bucket behind CloudFront. |
 | `demo/` | The single-file demo page and the published public key. |
 | `testdata/` | `canonical_golden.txt`, the contract between the Go encoder and the Python verifier. |
-| `scripts/` | `preflight.sh`. |
+| `scripts/` | `preflight.sh`, the deployment and parity checks, and `criteria.sh`, the acceptance-criteria harness behind `make criteria`. |
 
 ## How a hold ends
 
@@ -297,9 +297,11 @@ environment.
 
 ## Throttling and failed stages
 
-The account allows ten concurrent Lambda executions, shared by every
-function. Two limits keep any one caller from taking them all, and the state
-machine is written so that running out of them is never silent.
+The account's Lambda concurrency limit is 1000, raised from 10 on 24 October,
+so concurrency is no longer what the route limits protect. Two routes are
+limited because of the person at the other end: every raise is a real email,
+and the clinician's answer must not queue behind polling. The state machine is
+written so that a throttled or failed stage is never silent.
 
 - **`POST /raise` is limited to about three a minute** (0.05 per second,
   burst 1). Every raise that gets through becomes a real email to a real
@@ -308,8 +310,7 @@ machine is written so that running out of them is never silent.
   attention budget is kept per execution environment (see known gaps below).
   The real cap arrives when that budget is kept in the table.
 - **`GET /escalation/{id}` is limited to about one a second** (burst 2), so
-  polling and refreshing cannot take the slots a clinician's `POST /reply`
-  needs. API Gateway enforces these limits approximately. Under test it let
+  polling and refreshing cannot crowd out a clinician's `POST /reply`. API Gateway enforces these limits approximately. Under test it let
   through more than the burst, sometimes all of a burst of thirty.
 - **A throttled invocation is retried, and nothing else is.** Every Lambda
   task in the state machine retries `Lambda.TooManyRequestsException`, about
@@ -335,9 +336,10 @@ This is an MVP built for judging. Its boundary is a decision, not a backlog:
 - one escalation type;
 - one verified recipient;
 - one provisioned channel, Amazon SES v2. Tier 1 (WhatsApp) and tier 3 (SMS)
-  are declared in the Heart-Map with no provider behind them. Tier 1 fails on
-  every run because it is not provisioned, which is how the failover and the
-  breaker are exercised.
+  are declared in the Heart-Map with no provider behind them. Tier 1 never
+  delivers, which is how the failover and the breaker are exercised: it is
+  `FAILED` when attempted with no provider, and `ESCALATED` when the breaker
+  is open and it is skipped.
 
 It does not have, and is not meant to have:
 
