@@ -23,9 +23,8 @@ Who is on call, on which channels, in what order, inside which quiet hours, and 
 what attention budget: all resolved from the declared Heart-Map before any provider is
 touched. A value the Heart-Map declares is the value used. Where it omits one, the loader
 supplies a stated default: a tier waits 300 seconds, and the attention budget is 6 reaches
-an hour, a burst of 3, and a 90-second coalescing window. One fallback is a defect, not a
-default: a declared time zone that fails to load is read as UTC rather than refused. The
-README lists it under Known gaps.
+an hour, a burst of 3, and a 90-second coalescing window. A declared time zone that fails
+to load is refused, never read as UTC.
 
 ## 03. Attention guardrails run first, and each decision writes a receipt
 

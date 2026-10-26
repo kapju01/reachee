@@ -118,6 +118,15 @@ func TestLadderMustReferenceDeclaredChannels(t *testing.T) {
 	}
 }
 
+// A misspelt zone read as UTC would move Chicago's 22:00-07:00 quiet window
+// to 17:00-02:00 local, and a 2am page would go through. It is refused.
+func TestLoadRejectsAZoneThatDoesNotLoad(t *testing.T) {
+	bad := strings.Replace(sample, "America/Chicago", "America/Chicgo", 1)
+	if _, err := Load(bad); err == nil || !strings.Contains(err.Error(), "America/Chicgo") {
+		t.Fatalf("expected the misspelt zone to be refused by name, got %v", err)
+	}
+}
+
 func TestLoadRejectsAnEmptyLadder(t *testing.T) {
 	src := "contact:\n  id: someone\n  channels:\n    email:\n      address: a@b.invalid\n"
 	if _, err := Load(src); err == nil {

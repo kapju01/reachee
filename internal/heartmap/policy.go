@@ -221,11 +221,16 @@ func Load(src string) (Policy, error) {
 	}
 
 	if qh := asMap(c["quiet_hours"]); qh != nil {
+		// A zone that will not load is refused, not read as UTC. UTC would
+		// shift the quiet window by the zone's offset and page the contact
+		// inside the hours the document declares quiet.
 		loc := time.UTC
 		if tz := str(qh, "timezone"); tz != "" {
-			if l, err := time.LoadLocation(tz); err == nil {
-				loc = l
+			l, err := time.LoadLocation(tz)
+			if err != nil {
+				return Policy{}, fmt.Errorf("heartmap: quiet_hours.timezone %q does not load: %w", tz, err)
 			}
+			loc = l
 		}
 		p.QuietHours = QuietHours{
 			Location: loc,

@@ -129,8 +129,8 @@ begin "02" "Contact policy is resolved before any provider is touched"
 # tier timeouts of 900 s and 60 s, a Chicago quiet window, and a budget of
 # 11 an hour, burst 5, 240 s. The stated defaults are asserted separately.
 if [ "$have_go" -eq 1 ]; then
-  gotests ./internal/heartmap TestLoadParsesTheFullPolicy TestQuietHoursRespectTheContactTimezone TestDeclaredRateLimitIsTheOneUsed TestOmittedValuesTakeTheStatedDefaults \
-    && ok "who, which channels, what order, each tier's timeout, quiet hours, and the attention budget are read from the declared Heart-Map; an omitted value takes the stated default" \
+  gotests ./internal/heartmap TestLoadParsesTheFullPolicy TestQuietHoursRespectTheContactTimezone TestDeclaredRateLimitIsTheOneUsed TestOmittedValuesTakeTheStatedDefaults TestLoadRejectsAZoneThatDoesNotLoad \
+    && ok "who, which channels, what order, each tier's timeout, quiet hours, and the attention budget are read from the declared Heart-Map; an omitted value takes the stated default, and a zone that will not load is refused" \
     || bad "internal/heartmap loader tests"
   gotests ./internal/dignity TestDeclaredBurstIsTheBudgetSpent \
     && ok "the gate spends the budget the document declares: a declared burst of 5 delivers five and suppresses the sixth" \

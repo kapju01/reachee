@@ -154,20 +154,22 @@ These follow from the principles above and are not negotiable in a hurry.
 
 ## Known defects and gaps, in priority order
 
-These are the same five, in the same order, as the README's "Known gaps".
+These are the same four, in the same order, as the README's "Known gaps".
 
 1. A deferred escalation is dropped and nothing re-queues it. The `DEFERRED`
    receipt is written, but the reach never happens, which contradicts the
    intent of criterion 03.
-2. A declared quiet-hours time zone that fails to load silently becomes UTC,
-   so a typo in a Heart-Map pages a clinician inside their quiet hours.
-3. The dignity pipeline (coalescing, the attention budget, quiet hours) keeps
+2. The dignity pipeline (coalescing, the attention budget, quiet hours) keeps
    its state in memory per execution environment, so its decisions do not
    hold across cold starts and nothing caps the total number of raises.
-4. Coalesced joiners never receive the resolution. Out of scope for the
+3. Coalesced joiners never receive the resolution. Out of scope for the
    submission, documented as a known gap.
-5. No empathy model is configured. Every `SENT` receipt says so with
+4. No empathy model is configured. Every `SENT` receipt says so with
    `empathy_source: fallback`.
+
+Fixed, and listed under the README's "Fixed": a declared quiet-hours time
+zone that fails to load used to become UTC silently. `heartmap.Load` now
+refuses the document.
 
 ## Handler requirements
 
